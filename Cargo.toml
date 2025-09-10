@@ -1,0 +1,31 @@
+[package]
+name = "dbfast"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+authors = ["evoludigit"]
+description = "A fast database library"
+license = "MIT"
+repository = "https://github.com/evoludigit/dbfast"
+keywords = ["database", "performance"]
+categories = ["database"]
+
+[dependencies]
+tokio = { version = "1.0", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "benchmarks"
+harness = false
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.dev]
+debug = true

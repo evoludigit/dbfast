@@ -1,0 +1,44 @@
+# Clippy configuration for dbfast
+# https://doc.rust-lang.org/clippy/configuration.html
+
+# Maximum cognitive complexity allowed
+cognitive-complexity-threshold = 25
+
+# Maximum number of lines allowed in a function
+too-many-lines-threshold = 100
+
+# Maximum number of arguments allowed in a function
+too-many-arguments-threshold = 7
+
+# Maximum number of bounds allowed in a generic type
+type-complexity-threshold = 250
+
+# Maximum number of single char bindings allowed
+single-char-binding-names-threshold = 4
+
+# Lint level for trivial numeric casts
+trivial-casts = "allow"
+
+# Disallow `dbg!` in production code
+disallowed-macros = ["dbg"]
+
+# Disallowed functions/methods
+disallowed-methods = [
+    "std::panic::panic_any",
+    "std::process::exit"
+]
+
+# Enforce documentation for public items
+missing-docs-in-private-items = false
+
+# Allow uppercase acronyms in type names
+upper-case-acronyms-aggressive = false
+
+# Maximum number of struct fields allowed
+enum-variant-size-threshold = 200
+
+# Allow large error types (common in database libraries)
+large-error-threshold = 128
+
+# Ignore certain warnings for async code
+avoid-breaking-exported-api = false

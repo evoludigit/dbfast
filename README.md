@@ -60,7 +60,7 @@ db/
 
 ```bash
 # Build from source
-git clone https://github.com/yourusername/dbfast
+git clone https://github.com/evoludigit/dbfast
 cd dbfast
 cargo build --release
 
@@ -143,6 +143,11 @@ def database():
 - **Automatic backups** before destructive operations  
 - **Atomic deployments** via single transactions
 - **Validation framework** ensures deployments work
+
+## Author
+
+**Lionel Hamayon**  
+Email: lionel.hamayon@evolution-digitale.fr
 
 ## License
 

@@ -1,0 +1,75 @@
+# Pre-commit hooks configuration
+# Generated on 2025-09-10
+# Install with: pip install pre-commit && pre-commit install
+
+repos:
+  # Rust formatting and linting
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+
+  # Rust-specific hooks
+  - repo: https://github.com/doublify/pre-commit-rust
+    rev: v1.0
+    hooks:
+      - id: fmt
+        name: Rust fmt
+        description: Format Rust code with rustfmt
+        args: ['--verbose', '--edition=2021']
+      - id: clippy
+        name: Rust clippy
+        description: Lint Rust code with clippy
+        args: ['--all-targets', '--all-features', '--', '-D', 'warnings']
+
+  # Additional Rust quality tools
+  - repo: local
+    hooks:
+      - id: cargo-check
+        name: Cargo check
+        description: Check that Rust code compiles
+        entry: cargo check --all-targets --all-features
+        language: system
+        files: \.rs$
+        pass_filenames: false
+
+      - id: cargo-test
+        name: Cargo test
+        description: Run Rust tests
+        entry: cargo test --all-features
+        language: system
+        files: \.rs$
+        pass_filenames: false
+
+      - id: cargo-audit
+        name: Cargo audit
+        description: Audit Rust dependencies for security vulnerabilities
+        entry: cargo audit
+        language: system
+        files: (Cargo\.(toml|lock)|\.rs)$
+        pass_filenames: false
+
+      - id: cargo-deny
+        name: Cargo deny
+        description: Check dependencies with cargo-deny
+        entry: cargo deny check
+        language: system  
+        files: (Cargo\.(toml|lock)|deny\.toml)$
+        pass_filenames: false
+
+  # Commit message formatting
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v3.29.1
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]
+
+default_install_hook_types: [pre-commit, commit-msg]
+default_stages: [pre-commit]

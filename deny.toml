@@ -1,0 +1,88 @@
+# cargo-deny configuration
+# https://embarkstudios.github.io/cargo-deny/
+
+[graph]
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "x86_64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+]
+all-features = false
+no-default-features = false
+
+[output]
+feature-depth = 1
+
+[advisories]
+version = 2
+db-path = "~/.cargo/advisory-db"
+db-urls = ["https://github.com/rustsec/advisory-db"]
+ignore = [
+    # "RUSTSEC-0000-0000",
+]
+informational = "warn"
+severity-threshold = "low"
+
+[licenses]
+version = 2
+confidence-threshold = 0.8
+exceptions = [
+    # Allow specific crates to have different licenses
+    # { allow = ["Apache-2.0"], name = "example" },
+]
+
+# Licenses we are happy to use
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-DFS-2016",
+    "CC0-1.0",
+]
+
+# Licenses we want to deny
+deny = [
+    "GPL-2.0",
+    "GPL-3.0",
+    "AGPL-3.0",
+    "LGPL-2.0",
+    "LGPL-2.1",
+    "LGPL-3.0",
+    "SSPL-1.0",
+    "BUSL-1.1",
+]
+
+# Allow 1 or more licenses on a per-crate basis, so that particular licenses
+# aren't accepted for every possible crate as with the normal allow list
+private = { ignore = true }
+
+[bans]
+multiple-versions = "warn"
+wildcards = "allow"
+highlight = "all"
+workspace-default-features = "allow"
+external-default-features = "allow"
+
+# Skip certain crates when checking for duplicates
+skip = [
+    # { name = "winapi", version = "=0.2" },
+]
+
+# Skip certain crates from being checked for duplicates entirely
+skip-tree = [
+    # { name = "windows-sys", version = "=0.45" },
+]
+
+deny = [
+    # Deny crates with serious security vulnerabilities
+    # { name = "openssl", version = "*" },
+]
+
+[sources]
+unknown-registry = "warn"
+unknown-git = "warn"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

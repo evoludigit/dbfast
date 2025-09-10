@@ -1,0 +1,45 @@
+# Cargo configuration
+# Generated on 2025-09-10
+
+[build]
+# Use all available CPU cores for builds
+jobs = 0
+
+[env]
+# Set RUST_BACKTRACE=1 for development
+RUST_BACKTRACE = { value = "1", condition = { env-not-set = ["RUST_BACKTRACE"] } }
+
+[alias]
+# Useful cargo aliases for development
+xtask = "run --package xtask --"
+xtest = "nextest run"
+xcheck = "check --all-targets --all-features"
+xclippy = "clippy --all-targets --all-features -- -D warnings"
+xfmt = "fmt --all"
+xaudit = "audit"
+xdeny = "deny check"
+xdoc = "doc --no-deps --document-private-items --all-features --open"
+xbench = "bench"
+xcoverage = "tarpaulin --verbose --all-features --workspace --timeout 120"
+
+# Quick quality check
+quality = ["xcheck", "xtest", "xfmt", "xclippy"]
+
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
+[profile.dev]
+# Faster debug builds
+debug = 1
+incremental = true
+
+[profile.release]
+# Optimize for size and speed
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
+
+[profile.bench]
+debug = true

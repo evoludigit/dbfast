@@ -1,0 +1,63 @@
+# Dependabot configuration
+# Generated on 2025-09-10
+
+version: 2
+updates:
+  # Enable version updates for Cargo
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "evoludigit"
+    assignees:
+      - "evoludigit"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+      include: "scope"
+    labels:
+      - "dependencies"
+    allow:
+      - dependency-type: "direct"
+      - dependency-type: "indirect"
+    ignore:
+      # Ignore major version updates for now
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      # Group tokio-related dependencies
+      tokio:
+        patterns:
+          - "tokio*"
+      # Group serde-related dependencies  
+      serde:
+        patterns:
+          - "serde*"
+      # Group development dependencies
+      dev-dependencies:
+        dependency-type: "development"
+        patterns:
+          - "*"
+
+  # Enable version updates for GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday" 
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "evoludigit"
+    assignees:
+      - "evoludigit"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    labels:
+      - "ci"
+      - "dependencies"
