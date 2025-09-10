@@ -168,7 +168,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Auto-assign based on CODEOWNERS
-        uses: kentaro-m/auto-assign-action@v1.2.5
+        uses: kentaro-m/auto-assign-action@v2.0.0
         with:
           configuration-path: '.github/auto-assign.yml'
 
