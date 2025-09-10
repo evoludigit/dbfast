@@ -16,7 +16,7 @@ fn test_status_command_output() {
     let project_dir = env::current_dir().expect("Failed to get current directory");
 
     let output = Command::new("cargo")
-        .args(&["run", "--", "status"])
+        .args(["run", "--", "status"])
         .current_dir(&project_dir)
         .output()
         .expect("Failed to execute command");

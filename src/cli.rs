@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 
-/// Main CLI interface for DBFast
+/// Main CLI interface for `DBFast`
 #[derive(Parser)]
 #[command(name = "dbfast")]
 #[command(version = crate::VERSION)]
@@ -41,6 +41,7 @@ pub enum Commands {
 
 impl Cli {
     /// Parse command line arguments
+    #[must_use]
     pub fn parse() -> Self {
         <Self as Parser>::parse()
     }

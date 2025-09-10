@@ -2,7 +2,6 @@ use crate::config::Config;
 use crate::error::{DbFastError, Result};
 
 #[allow(clippy::disallowed_methods)]
-
 /// Handle the seed command
 pub fn handle_seed(output_name: &str, with_seeds: bool) -> Result<()> {
     // Try to load config from current directory
@@ -15,12 +14,12 @@ pub fn handle_seed(output_name: &str, with_seeds: bool) -> Result<()> {
 
     let config =
         Config::from_file(&config_path).map_err(|e| DbFastError::ConfigCreationFailed {
-            message: format!("Failed to load config: {}", e),
+            message: format!("Failed to load config: {e}"),
         })?;
 
-    println!("Creating database: {}", output_name);
+    println!("Creating database: {output_name}");
     println!("Template: {}", config.database.template_name);
-    println!("With seeds: {}", with_seeds);
+    println!("With seeds: {with_seeds}");
     println!("Repository: {}", config.repository.path);
 
     // For now, this is a placeholder implementation
@@ -29,10 +28,7 @@ pub fn handle_seed(output_name: &str, with_seeds: bool) -> Result<()> {
     // 2. Create database from template: CREATE DATABASE output_name WITH TEMPLATE template_name
     // 3. Report success/failure
 
-    println!(
-        "✅ Database '{}' created successfully in ~100ms",
-        output_name
-    );
+    println!("✅ Database '{output_name}' created successfully in ~100ms");
 
     Ok(())
 }

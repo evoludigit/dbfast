@@ -34,7 +34,7 @@ fn test_file_scanner_finds_sql_files() {
     // Check that all found files are SQL files
     for file in &files {
         assert!(file.path.to_string_lossy().ends_with(".sql"));
-        assert!(file.hash.len() > 0);
+        assert!(!file.hash.is_empty());
     }
 }
 

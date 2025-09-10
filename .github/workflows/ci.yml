@@ -5,9 +5,9 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, dev]
   pull_request:
-    branches: [main, develop]
+    branches: [main, dev]
 
 env:
   CARGO_TERM_COLOR: always
@@ -50,6 +50,27 @@ jobs:
   test:
     name: Test & Coverage
     runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        # Set health checks to wait until postgres has started
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    env:
+      POSTGRES_PASSWORD: postgres
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+    
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -62,10 +83,22 @@ jobs:
         with:
           key: test-${{ hashFiles('Cargo.lock') }}
 
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
       - name: Install cargo-nextest and cargo-tarpaulin
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest,cargo-tarpaulin
+
+      - name: Wait for PostgreSQL
+        run: |
+          until pg_isready -h localhost -p 5432 -U postgres; do
+            echo "Waiting for PostgreSQL to be ready..."
+            sleep 2
+          done
 
       - name: Run tests
         run: cargo nextest run --all-features

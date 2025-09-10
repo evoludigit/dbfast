@@ -18,15 +18,17 @@
     clippy::unused_async
 )]
 
-/// CLI interface for DBFast
+/// CLI interface for `DBFast`
 pub mod cli;
 /// CLI commands
 pub mod commands;
-/// Configuration management for DBFast
+/// Configuration management for `DBFast`
 pub mod config;
 pub mod connection;
 /// Database connection and pooling
 pub mod database;
+/// Environment filtering for deployments
+pub mod environment;
 /// Error handling
 pub mod error;
 pub mod query;

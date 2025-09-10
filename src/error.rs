@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-/// Custom error types for DBFast
+/// Custom error types for `DBFast`
 #[derive(Error, Debug)]
 pub enum DbFastError {
     /// Repository directory not found
@@ -26,5 +26,5 @@ pub enum DbFastError {
     TomlSer(#[from] toml::ser::Error),
 }
 
-/// Result type alias for DBFast operations
+/// Result type alias for `DBFast` operations
 pub type Result<T> = std::result::Result<T, DbFastError>;

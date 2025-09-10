@@ -16,7 +16,7 @@ pub enum ConfigError {
     Toml(#[from] toml::de::Error),
 }
 
-/// Main configuration structure for DBFast
+/// Main configuration structure for `DBFast`
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Config {
     /// Database connection configuration
@@ -66,6 +66,7 @@ pub struct Environment {
 
 impl Config {
     /// Create a new configuration with default values
+    #[must_use]
     pub fn new(repo_path: &str, template_name: &str) -> Self {
         let mut environments = HashMap::new();
         environments.insert(
@@ -109,7 +110,7 @@ impl Config {
     /// Load configuration from a TOML file
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, ConfigError> {
         let contents = fs::read_to_string(path)?;
-        let config: Config = toml::from_str(&contents)?;
+        let config: Self = toml::from_str(&contents)?;
         Ok(config)
     }
 }
