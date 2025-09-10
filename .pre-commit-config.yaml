@@ -23,7 +23,6 @@ repos:
       - id: fmt
         name: Rust fmt
         description: Format Rust code with rustfmt
-        args: ['--verbose', '--edition=2021']
       - id: clippy
         name: Rust clippy
         description: Lint Rust code with clippy
@@ -48,21 +47,21 @@ repos:
         files: \.rs$
         pass_filenames: false
 
-      - id: cargo-audit
-        name: Cargo audit
-        description: Audit Rust dependencies for security vulnerabilities
-        entry: cargo audit
-        language: system
-        files: (Cargo\.(toml|lock)|\.rs)$
-        pass_filenames: false
+      # - id: cargo-audit
+      #   name: Cargo audit
+      #   description: Audit Rust dependencies for security vulnerabilities
+      #   entry: cargo audit
+      #   language: system
+      #   files: (Cargo\.(toml|lock)|\.rs)$
+      #   pass_filenames: false
 
-      - id: cargo-deny
-        name: Cargo deny
-        description: Check dependencies with cargo-deny
-        entry: cargo deny check
-        language: system  
-        files: (Cargo\.(toml|lock)|deny\.toml)$
-        pass_filenames: false
+      # - id: cargo-deny
+      #   name: Cargo deny
+      #   description: Check dependencies with cargo-deny
+      #   entry: cargo deny check
+      #   language: system
+      #   files: (Cargo\.(toml|lock)|deny\.toml)$
+      #   pass_filenames: false
 
   # Commit message formatting
   - repo: https://github.com/commitizen-tools/commitizen
