@@ -50,3 +50,37 @@ fn test_production_safety() {
     assert!(filtered.contains(&PathBuf::from("tests/fixtures/sql/0_schema/tables.sql")));
     assert!(filtered.contains(&PathBuf::from("tests/fixtures/sql/6_migration/001_add_column.sql")));
 }
+
+#[test]
+fn test_empty_environment_includes_all() {
+    let config = EnvironmentConfig {
+        name: "test".to_string(),
+        ..Default::default()
+    };
+    
+    let files = vec![
+        PathBuf::from("tests/fixtures/sql/0_schema/tables.sql"),
+        PathBuf::from("tests/fixtures/sql/1_seed_common/users.sql"),
+    ];
+    
+    let filtered = config.filter_files(&files).unwrap();
+    assert_eq!(filtered.len(), 2);
+}
+
+#[test]
+fn test_directory_exclude_only() {
+    let config = EnvironmentConfig {
+        name: "test".to_string(),
+        exclude_directories: Some(vec!["1_seed_common".to_string()]),
+        ..Default::default()
+    };
+    
+    let files = vec![
+        PathBuf::from("tests/fixtures/sql/0_schema/tables.sql"),
+        PathBuf::from("tests/fixtures/sql/1_seed_common/users.sql"),
+    ];
+    
+    let filtered = config.filter_files(&files).unwrap();
+    assert_eq!(filtered.len(), 1);
+    assert!(filtered.contains(&PathBuf::from("tests/fixtures/sql/0_schema/tables.sql")));
+}
