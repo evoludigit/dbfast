@@ -109,12 +109,7 @@ impl EnvironmentConfig {
     }
 
     /// Apply include/exclude filters to determine if file should be included
-    fn apply_filters(
-        &self,
-        dir: &str,
-        filename: &str,
-        _file_str: &str,
-    ) -> bool {
+    fn apply_filters(&self, dir: &str, filename: &str, _file_str: &str) -> bool {
         // 1. Apply directory include filter
         if let Some(include_dirs) = &self.include_directories {
             if !include_dirs.iter().any(|d| dir == d) {
@@ -146,10 +141,11 @@ impl EnvironmentConfig {
                 // Handle patterns like "prod_*.sql" or "test_*.sql"
                 if stripped.ends_with("*.sql") {
                     let prefix = stripped.trim_end_matches("*.sql");
-                    if filename.starts_with(prefix) && 
-                       std::path::Path::new(filename)
-                           .extension()
-                           .map_or(false, |ext| ext.eq_ignore_ascii_case("sql")) {
+                    if filename.starts_with(prefix)
+                        && std::path::Path::new(filename)
+                            .extension()
+                            .map_or(false, |ext| ext.eq_ignore_ascii_case("sql"))
+                    {
                         return true;
                     }
                 }
