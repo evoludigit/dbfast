@@ -65,12 +65,12 @@ skip-tree = [
     # { name = "windows-sys", version = "=0.45" },
 ]
 
-deny = [
-    # Deny crates with serious security vulnerabilities
-    # { name = "openssl", version = "*" },
-]
+# Deny crates with serious security vulnerabilities
+# deny = [
+#     { name = "openssl", version = "*" },
+# ]
 
-# Deny crates with problematic licenses
+# Deny crates with problematic licenses  
 [[bans.deny]]
 name = "*"
 license = "GPL-2.0"
