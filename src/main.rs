@@ -1,5 +1,5 @@
 use dbfast::cli::{Cli, Commands};
-use dbfast::commands::init;
+use dbfast::commands::{init, seed};
 use std::process;
 
 fn main() {
@@ -13,7 +13,10 @@ fn main() {
             }
         }
         Some(Commands::Seed { output, with_seeds }) => {
-            println!("Seeding database to output: {} (with-seeds: {})", output, with_seeds);
+            if let Err(e) = seed::handle_seed(&output, with_seeds) {
+                eprintln!("Error: {}", e);
+                process::exit(1);
+            }
         }
         Some(Commands::Status) => {
             println!("DBFast status check");
