@@ -20,7 +20,6 @@ db-urls = ["https://github.com/rustsec/advisory-db"]
 ignore = [
     # "RUSTSEC-0000-0000",
 ]
-informational = "warn"
 severity-threshold = "low"
 
 [licenses]
