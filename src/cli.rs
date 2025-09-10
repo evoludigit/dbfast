@@ -36,7 +36,11 @@ pub enum Commands {
         with_seeds: bool,
     },
     /// Show template and database status
-    Status,
+    Status {
+        /// Show verbose status information
+        #[arg(long)]
+        verbose: bool,
+    },
 }
 
 impl Cli {
