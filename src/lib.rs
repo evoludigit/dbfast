@@ -10,13 +10,25 @@
     missing_docs,
     rust_2018_idioms
 )]
-#![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
+#![allow(
+    clippy::missing_errors_doc,
+    clippy::missing_panics_doc,
+    clippy::multiple_crate_versions,
+    clippy::module_name_repetitions,
+    clippy::unused_async
+)]
 
+/// CLI interface for DBFast
+pub mod cli;
+/// CLI commands
+pub mod commands;
 /// Configuration management for DBFast
 pub mod config;
 pub mod connection;
 /// Database connection and pooling
 pub mod database;
+/// Error handling
+pub mod error;
 pub mod query;
 /// File scanning and hash calculation
 pub mod scanner;

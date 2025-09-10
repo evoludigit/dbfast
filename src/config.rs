@@ -65,6 +65,47 @@ pub struct Environment {
 }
 
 impl Config {
+    /// Create a new configuration with default values
+    pub fn new(repo_path: &str, template_name: &str) -> Self {
+        let mut environments = HashMap::new();
+        environments.insert(
+            "local".to_string(),
+            Environment {
+                include_directories: vec![
+                    "0_schema".to_string(),
+                    "1_seed_common".to_string(),
+                    "2_seed_backend".to_string(),
+                ],
+                exclude_directories: vec![],
+            },
+        );
+        environments.insert(
+            "production".to_string(),
+            Environment {
+                include_directories: vec!["0_schema".to_string(), "6_migration".to_string()],
+                exclude_directories: vec![
+                    "1_seed_common".to_string(),
+                    "2_seed_backend".to_string(),
+                ],
+            },
+        );
+
+        Self {
+            database: DatabaseConfig {
+                host: "localhost".to_string(),
+                port: 5432,
+                user: "postgres".to_string(),
+                password_env: Some("POSTGRES_PASSWORD".to_string()),
+                template_name: template_name.to_string(),
+            },
+            repository: RepositoryConfig {
+                path: repo_path.to_string(),
+                repo_type: "structured".to_string(),
+            },
+            environments,
+        }
+    }
+
     /// Load configuration from a TOML file
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, ConfigError> {
         let contents = fs::read_to_string(path)?;
