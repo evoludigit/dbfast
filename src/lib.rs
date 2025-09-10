@@ -12,6 +12,8 @@
 )]
 #![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 
+/// CLI interface for DBFast
+pub mod cli;
 /// Configuration management for DBFast
 pub mod config;
 pub mod connection;
