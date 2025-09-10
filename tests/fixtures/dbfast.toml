@@ -1,0 +1,17 @@
+[database]
+host = "localhost"
+port = 5432
+user = "postgres"
+password_env = "POSTGRES_PASSWORD"
+template_name = "myapp_template"
+
+[repository]
+path = "./db"
+type = "structured"
+
+[environments.local]
+include_directories = ["0_schema", "1_seed_common", "2_seed_backend"]
+
+[environments.production]
+include_directories = ["0_schema", "6_migration"]
+exclude_directories = ["1_seed_common", "2_seed_backend"]

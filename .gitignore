@@ -4,6 +4,7 @@ Cargo.lock
 
 # DBFast specific
 dbfast.toml
+!tests/fixtures/dbfast.toml
 test-data/
 .dbfast_cache.db
 
