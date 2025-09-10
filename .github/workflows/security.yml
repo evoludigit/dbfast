@@ -14,8 +14,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  security-audit:
-    name: Security Audit
+  security-scan:
+    name: Security Scan
     runs-on: ubuntu-latest
     
     steps:
