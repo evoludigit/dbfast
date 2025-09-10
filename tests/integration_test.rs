@@ -15,7 +15,7 @@ async fn test_query_builder() {
         .where_clause("id = 1")
         .param("test".to_string())
         .build();
-    
+
     assert_eq!(query, "WHERE id = 1");
 }
 
@@ -25,6 +25,6 @@ async fn test_query_builder_multiple_conditions() {
         .where_clause("id = 1")
         .where_clause("name = 'test'")
         .build();
-    
+
     assert_eq!(query, "WHERE id = 1 AND name = 'test'");
 }

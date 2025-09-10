@@ -28,5 +28,9 @@ fn bench_query_builder_complex(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_query_builder_simple, bench_query_builder_complex);
+criterion_group!(
+    benches,
+    bench_query_builder_simple,
+    bench_query_builder_complex
+);
 criterion_main!(benches);

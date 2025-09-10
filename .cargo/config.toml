@@ -2,8 +2,9 @@
 # Generated on 2025-09-10
 
 [build]
-# Use all available CPU cores for builds
-jobs = 0
+# Use all available CPU cores for builds (0 means auto-detect)
+# Commenting out for CI compatibility
+# jobs = 0
 
 [env]
 # Set RUST_BACKTRACE=1 for development
@@ -25,9 +26,10 @@ xcoverage = "tarpaulin --verbose --all-features --workspace --timeout 120"
 # Quick quality check
 quality = ["xcheck", "xtest", "xfmt", "xclippy"]
 
-[target.x86_64-unknown-linux-gnu]
-linker = "clang"
-rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+# Commenting out custom linker for CI compatibility
+# [target.x86_64-unknown-linux-gnu]
+# linker = "clang"
+# rustflags = ["-C", "link-arg=-fuse-ld=lld"]
 
 [profile.dev]
 # Faster debug builds
