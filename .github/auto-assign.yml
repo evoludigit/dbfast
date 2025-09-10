@@ -17,8 +17,8 @@ assignees: []
 # Skip adding reviewers if PR is in draft
 skipDraft: true
 
-# File path based assignments
-reviewers:
+# File path based reviewer assignments
+fileReviewers:
   # Core system changes
   "src/core/**/*":
     - evoludigit

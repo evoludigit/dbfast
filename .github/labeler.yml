@@ -3,77 +3,83 @@
 
 # Core areas
 "area: core":
-  - 'src/core/**/*'
-  - 'src/lib.rs'
+  - changed-files:
+    - any-glob-to-any-file: 'src/core/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'src/lib.rs'
 
 "area: cli":
-  - 'src/cli/**/*'
-  - 'src/main.rs'
+  - changed-files:
+    - any-glob-to-any-file: 'src/cli/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'src/main.rs'
 
 "area: config":
-  - 'src/config/**/*'
-  - 'dbfast.toml*'
+  - changed-files:
+    - any-glob-to-any-file: 
+      - 'src/config/**/*'
+      - 'dbfast.toml*'
+      - '.clippy.toml'
+      - 'rustfmt.toml'
+      - 'rust-toolchain.toml'
 
 "area: database":
-  - 'src/db/**/*'
-  - 'src/postgres/**/*'
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'src/db/**/*'
+      - 'src/postgres/**/*'
 
 "area: tests":
-  - 'tests/**/*'
-  - 'benches/**/*'
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'tests/**/*'
+      - 'benches/**/*'
 
 # CI/CD and infrastructure
 "area: ci":
-  - '.github/**/*'
-  - '.pre-commit-config.yaml'
-  - 'Makefile'
+  - changed-files:
+    - any-glob-to-any-file:
+      - '.github/**/*'
+      - '.pre-commit-config.yaml'
+      - 'Makefile'
 
 "area: dependencies":
-  - 'Cargo.toml'
-  - 'Cargo.lock'
-  - 'deny.toml'
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'deny.toml'
 
 # Documentation
 "area: docs":
-  - 'README.md'
-  - 'docs/**/*'
-  - '**/*.md'
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'README.md'
+      - 'docs/**/*'
+      - '**/*.md'
 
-# Configuration files
-"area: config":
-  - '.clippy.toml'
-  - 'rustfmt.toml'
-  - 'rust-toolchain.toml'
-
-# Size labels (these work with size-label-action)
-"size: XS":
-  - any: ['*']
-
-# Type labels (based on file patterns)
-"type: bug":
-  - any: ['*']  # Will be manually applied or based on PR title
-
-"type: feature":
-  - any: ['*']  # Will be manually applied or based on PR title
-
+# Type labels based on file patterns
 "type: maintenance":
-  - '.github/**/*'
-  - 'Cargo.toml'
-  - 'deny.toml'
-  - '.clippy.toml'
+  - changed-files:
+    - any-glob-to-any-file:
+      - '.github/**/*'
+      - 'Cargo.toml'
+      - 'deny.toml'
+      - '.clippy.toml'
 
 # Security related
 "security":
-  - 'deny.toml'
-  - '.github/workflows/security.yml'
-  - 'src/security/**/*'
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'deny.toml'
+      - '.github/workflows/security.yml'
+      - 'src/security/**/*'
 
 # Performance related  
 "performance":
-  - 'benches/**/*'
-  - 'src/performance/**/*'
-  - any: ['**/*benchmark*', '**/*perf*']
-
-# Breaking changes (manual application recommended)
-"breaking-change":
-  - any: ['*']  # Manual application based on semver analysis
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'benches/**/*'
+      - 'src/performance/**/*'
+      - '**/*benchmark*'
+      - '**/*perf*'
