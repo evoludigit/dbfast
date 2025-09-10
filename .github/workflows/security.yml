@@ -72,7 +72,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Check if PR only contains docs changes
+        id: docs_check
+        run: |
+          FILES_CHANGED=$(gh pr view ${{ github.event.number }} --json files --jq '.files[].path')
+          if echo "$FILES_CHANGED" | grep -v -E '\.(md|txt)$|^docs/' | grep -q .; then
+            echo "has_non_docs_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_non_docs_changes=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Run dependency review
+        if: steps.docs_check.outputs.has_non_docs_changes == 'true'
         uses: actions/dependency-review-action@v4
         with:
           # Fail on high or critical vulnerabilities
@@ -81,6 +94,11 @@ jobs:
           allow-licenses: GPL-2.0, GPL-3.0, LGPL-2.1, LGPL-3.0
           # Deny specific licenses if needed
           deny-licenses: AGPL-1.0, AGPL-3.0
+
+      - name: Skip dependency review for docs-only changes
+        if: steps.docs_check.outputs.has_non_docs_changes == 'false'
+        run: |
+          echo "✅ Skipping dependency review for documentation-only changes"
 
   codeql-analysis:
     name: CodeQL Analysis
