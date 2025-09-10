@@ -20,7 +20,6 @@ db-urls = ["https://github.com/rustsec/advisory-db"]
 ignore = [
     # "RUSTSEC-0000-0000",
 ]
-severity-threshold = "low"
 
 [licenses]
 version = 2
@@ -42,17 +41,8 @@ allow = [
     "CC0-1.0",
 ]
 
-# Licenses we want to deny
-deny = [
-    "GPL-2.0",
-    "GPL-3.0",
-    "AGPL-3.0",
-    "LGPL-2.0",
-    "LGPL-2.1",
-    "LGPL-3.0",
-    "SSPL-1.0",
-    "BUSL-1.1",
-]
+# Licenses we want to deny (deprecated - moved to bans section)
+# deny = []  # This key is deprecated
 
 # Allow 1 or more licenses on a per-crate basis, so that particular licenses
 # aren't accepted for every possible crate as with the normal allow list
@@ -79,6 +69,39 @@ deny = [
     # Deny crates with serious security vulnerabilities
     # { name = "openssl", version = "*" },
 ]
+
+# Deny crates with problematic licenses
+[[bans.deny]]
+name = "*"
+license = "GPL-2.0"
+
+[[bans.deny]]
+name = "*"  
+license = "GPL-3.0"
+
+[[bans.deny]]
+name = "*"
+license = "AGPL-3.0"
+
+[[bans.deny]]
+name = "*"
+license = "LGPL-2.0"
+
+[[bans.deny]]
+name = "*"
+license = "LGPL-2.1"
+
+[[bans.deny]]
+name = "*"
+license = "LGPL-3.0"
+
+[[bans.deny]]
+name = "*"
+license = "SSPL-1.0"
+
+[[bans.deny]]
+name = "*"
+license = "BUSL-1.1"
 
 [sources]
 unknown-registry = "warn"
