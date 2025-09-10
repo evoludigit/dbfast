@@ -33,11 +33,10 @@ impl DatabasePool {
     /// Create a new database connection pool
     pub async fn new(config: &DatabaseConfig) -> Result<Self, DatabaseError> {
         // Get password from environment variable
-        let password = if let Some(password_env) = &config.password_env {
-            env::var(password_env).unwrap_or_else(|_| "".to_string())
-        } else {
-            "".to_string()
-        };
+        let password = config.password_env.as_ref().map_or_else(
+            String::new,
+            |password_env| env::var(password_env).unwrap_or_else(|_| String::new()),
+        );
 
         // Build connection string
         let connection_string = format!(
@@ -52,7 +51,7 @@ impl DatabasePool {
         // Create pool
         let pool = Pool::builder().max_size(10).build(manager).await?;
 
-        Ok(DatabasePool { pool })
+        Ok(Self { pool })
     }
 
     /// Get a connection from the pool and execute a query

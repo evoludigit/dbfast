@@ -49,15 +49,13 @@ impl EnvironmentConfig {
     ///
     /// # Errors
     /// Returns `FilterError` if path processing fails or patterns are invalid
+    #[allow(clippy::unnecessary_wraps)]
     pub fn filter_files(&self, all_files: &[PathBuf]) -> Result<Vec<PathBuf>, FilterError> {
-        all_files
+        Ok(all_files
             .iter()
-            .filter_map(|file| match self.should_include_file(file) {
-                Ok(true) => Some(Ok(file.clone())),
-                Ok(false) => None,
-                Err(e) => Some(Err(e)),
-            })
-            .collect()
+            .filter(|file| self.should_include_file(file))
+            .cloned()
+            .collect())
     }
 
     /// Validate the configuration for a given base path
@@ -77,17 +75,17 @@ impl EnvironmentConfig {
     }
 
     /// Check if a file should be included based on filtering rules
-    fn should_include_file(&self, file: &PathBuf) -> Result<bool, FilterError> {
+    fn should_include_file(&self, file: &Path) -> bool {
         let file_str = file.to_string_lossy();
-        let directory = self.extract_directory(&file_str)?;
-        let filename = self.extract_filename(&file_str)?;
+        let directory = Self::extract_directory(&file_str);
+        let filename = Self::extract_filename(&file_str);
 
         self.apply_filters(&directory, &filename, &file_str)
     }
 
     /// Extract the relevant directory from a file path
-    /// For paths like "tests/fixtures/sql/0_schema/tables.sql", extracts "0_schema"
-    fn extract_directory(&self, file_str: &str) -> Result<String, FilterError> {
+    /// For paths like `"tests/fixtures/sql/0_schema/tables.sql"`, extracts `"0_schema"`
+    fn extract_directory(file_str: &str) -> String {
         let path_parts: Vec<&str> = file_str.split('/').collect();
 
         // Find the directory after "sql"
@@ -98,16 +96,16 @@ impl EnvironmentConfig {
                 continue;
             }
             if found_sql {
-                return Ok(part.to_string());
+                return (*part).to_string();
             }
         }
 
-        Ok(String::new())
+        String::new()
     }
 
     /// Extract filename from path
-    fn extract_filename(&self, file_str: &str) -> Result<String, FilterError> {
-        Ok(file_str.split('/').last().unwrap_or("").to_string())
+    fn extract_filename(file_str: &str) -> String {
+        file_str.split('/').last().unwrap_or("").to_string()
     }
 
     /// Apply include/exclude filters to determine if file should be included
@@ -116,50 +114,47 @@ impl EnvironmentConfig {
         dir: &str,
         filename: &str,
         _file_str: &str,
-    ) -> Result<bool, FilterError> {
+    ) -> bool {
         // 1. Apply directory include filter
         if let Some(include_dirs) = &self.include_directories {
             if !include_dirs.iter().any(|d| dir == d) {
-                return Ok(false);
+                return false;
             }
         }
 
         // 2. Apply directory exclude filter
         if let Some(exclude_dirs) = &self.exclude_directories {
             if exclude_dirs.iter().any(|d| dir == d) {
-                return Ok(false);
+                return false;
             }
         }
 
         // 3. Apply file exclude filter (highest priority)
         if let Some(exclude_files) = &self.exclude_files {
-            if self.matches_exclude_pattern(filename, exclude_files)? {
-                return Ok(false);
+            if Self::matches_exclude_pattern(filename, exclude_files) {
+                return false;
             }
         }
 
-        Ok(true)
+        true
     }
 
     /// Check if filename matches any exclude patterns
-    fn matches_exclude_pattern(
-        &self,
-        filename: &str,
-        patterns: &[String],
-    ) -> Result<bool, FilterError> {
+    fn matches_exclude_pattern(filename: &str, patterns: &[String]) -> bool {
         for pattern in patterns {
-            if pattern.starts_with("**/") {
-                let pattern_without_glob = &pattern[3..];
-
+            if let Some(stripped) = pattern.strip_prefix("**/") {
                 // Handle patterns like "prod_*.sql" or "test_*.sql"
-                if pattern_without_glob.ends_with("*.sql") {
-                    let prefix = pattern_without_glob.trim_end_matches("*.sql");
-                    if filename.starts_with(prefix) && filename.ends_with(".sql") {
-                        return Ok(true);
+                if stripped.ends_with("*.sql") {
+                    let prefix = stripped.trim_end_matches("*.sql");
+                    if filename.starts_with(prefix) && 
+                       std::path::Path::new(filename)
+                           .extension()
+                           .map_or(false, |ext| ext.eq_ignore_ascii_case("sql")) {
+                        return true;
                     }
                 }
             }
         }
-        Ok(false)
+        false
     }
 }

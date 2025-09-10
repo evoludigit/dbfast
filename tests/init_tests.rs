@@ -40,7 +40,7 @@ fn test_init_command_creates_config() {
     let project_dir = env::current_dir().expect("Failed to get current directory");
 
     let output = Command::new("cargo")
-        .args(&[
+        .args([
             "run",
             "--",
             "init",
@@ -99,7 +99,7 @@ fn test_init_command_with_invalid_repo_dir() {
     let project_dir = env::current_dir().expect("Failed to get current directory");
 
     let output = Command::new("cargo")
-        .args(&[
+        .args([
             "run",
             "--",
             "init",

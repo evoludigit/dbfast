@@ -55,9 +55,7 @@ impl FileScanner {
     pub fn scan(&self) -> Result<Vec<ScannedFile>, ScannerError> {
         let mut files = Vec::new();
 
-        for entry in WalkDir::new(&self.root_path)
-            .follow_links(false)
-            .into_iter()
+        for entry in WalkDir::new(&self.root_path).follow_links(false)
         {
             let entry = entry?;
             let path = entry.path();
@@ -70,7 +68,7 @@ impl FileScanner {
 
                     files.push(ScannedFile {
                         path: path.to_path_buf(),
-                        hash: format!("{:016x}", hash),
+                        hash: format!("{hash:016x}"),
                     });
                 }
             }

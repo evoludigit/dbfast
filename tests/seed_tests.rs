@@ -30,7 +30,7 @@ fn test_seed_command_output() {
     let project_dir = env::current_dir().expect("Failed to get current directory");
 
     let output = Command::new("cargo")
-        .args(&["run", "--", "seed", "--output", "test_db_123"])
+        .args(["run", "--", "seed", "--output", "test_db_123"])
         .current_dir(&project_dir)
         .output()
         .expect("Failed to execute command");
@@ -53,7 +53,7 @@ fn test_seed_command_with_seeds_flag() {
     let project_dir = env::current_dir().expect("Failed to get current directory");
 
     let output = Command::new("cargo")
-        .args(&[
+        .args([
             "run",
             "--",
             "seed",
