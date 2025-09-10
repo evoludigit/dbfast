@@ -1,0 +1,64 @@
+# DBFast Configuration Example
+# Copy to dbfast.toml and customize for your project
+
+[database]
+host = "localhost"
+port = 5432
+user = "postgres"
+password_env = "POSTGRES_PASSWORD"  # or password_file = "/path/to/password"
+template_name = "myapp_template"
+
+[repository]
+path = "./db"
+type = "structured"  # structured (numbered dirs) or flat
+include_patterns = ["**/*.sql"]
+exclude_patterns = ["**/temp_*.sql", "**/migration_*.sql"]
+
+# Environment-specific file filtering
+[environments.local]
+include_directories = ["0_schema", "1_seed_common", "2_seed_backend"]
+exclude_directories = ["4_seed_production", "6_migration"]
+exclude_files = ["**/sensitive_*.sql"]
+
+[environments.staging]
+include_directories = ["0_schema", "1_seed_common", "3_seed_frontend"]
+exclude_directories = ["2_seed_backend", "4_seed_production"]
+exclude_files = ["**/debug_*.sql", "**/test_*.sql"]
+
+[environments.production]
+include_directories = ["0_schema", "6_migration", "4_seed_production"]
+exclude_directories = ["1_seed_common", "2_seed_backend", "3_seed_frontend"]
+exclude_files = ["**/dev_*.sql", "**/test_*.sql", "**/debug_*.sql"]
+
+# Remote environments
+[[remotes]]
+name = "staging"
+url = "postgres://staging-server:5432/myapp"
+user = "deploy_user"
+password_env = "STAGING_DB_PASSWORD"
+environment = "staging"
+allow_destructive = false
+backup_before_deploy = true
+
+[[remotes]]
+name = "production"
+url = "postgres://prod-server:5432/myapp"
+user = "deploy_user" 
+password_env = "PROD_DB_PASSWORD"
+environment = "production"
+allow_destructive = false
+backup_before_deploy = true
+
+[performance]
+max_concurrent_clones = 4
+connection_pool_size = 8
+clone_timeout_ms = 30000
+build_timeout_ms = 300000
+
+[validation]
+required_tables = ["tb_user", "tb_config"]
+required_functions = ["app.create_user"]
+test_queries = [
+    "SELECT COUNT(*) FROM tb_user WHERE active = true"
+]
+min_expected_results = [1]

@@ -1,0 +1,18 @@
+# Rust
+/target/
+Cargo.lock
+
+# DBFast specific
+dbfast.toml
+test-data/
+.dbfast_cache.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
