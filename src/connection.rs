@@ -9,7 +9,7 @@ pub struct Connection {
 impl Connection {
     /// Create a new connection with the given URL
     #[must_use]
-    pub fn new(url: String) -> Self {
+    pub const fn new(url: String) -> Self {
         Self { url }
     }
 

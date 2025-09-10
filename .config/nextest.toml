@@ -37,6 +37,8 @@ fail-fast = true
 [test-groups]
 # Group integration tests
 integration = { max-threads = 1 }
+# Serial test group for tests that must run sequentially
+serial = { max-threads = 1 }
 
 [[profile.default.overrides]]
 filter = 'test(integration_)'

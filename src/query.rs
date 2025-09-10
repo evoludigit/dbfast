@@ -2,8 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Query builder for constructing database queries
+/// Builder for constructing database queries
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::module_name_repetitions)]
 pub struct QueryBuilder {
     query: String,
     params: Vec<String>,
@@ -12,7 +13,7 @@ pub struct QueryBuilder {
 impl QueryBuilder {
     /// Create a new query builder
     #[must_use]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             query: String::new(),
             params: Vec::new(),

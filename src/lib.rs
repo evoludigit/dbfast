@@ -1,4 +1,4 @@
-//! DBFast - A high-performance database library
+//! `DBFast` - A high-performance database library
 //!
 //! This library provides fast database operations with modern async/await support.
 
@@ -21,12 +21,23 @@ pub use query::QueryBuilder;
 /// Library version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// Simple hello world function for testing
+#[must_use]
+pub fn hello_world() -> String {
+    "Hello, World from DBFast!".to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_version() {
-        assert!(!VERSION.is_empty());
+        assert_eq!(VERSION, env!("CARGO_PKG_VERSION"));
+    }
+
+    #[test]
+    fn test_hello_world() {
+        assert_eq!(hello_world(), "Hello, World from DBFast!");
     }
 }
