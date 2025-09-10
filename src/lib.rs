@@ -12,11 +12,20 @@
 )]
 #![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 
+/// Configuration management for DBFast
+pub mod config;
 pub mod connection;
+/// Database connection and pooling
+pub mod database;
 pub mod query;
+/// File scanning and hash calculation
+pub mod scanner;
 
+pub use config::Config;
 pub use connection::Connection;
+pub use database::DatabasePool;
 pub use query::QueryBuilder;
+pub use scanner::FileScanner;
 
 /// Library version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
