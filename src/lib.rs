@@ -10,7 +10,13 @@
     missing_docs,
     rust_2018_idioms
 )]
-#![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
+#![allow(
+    clippy::missing_errors_doc, 
+    clippy::missing_panics_doc,
+    clippy::multiple_crate_versions,
+    clippy::module_name_repetitions,
+    clippy::unused_async
+)]
 
 /// CLI interface for DBFast
 pub mod cli;

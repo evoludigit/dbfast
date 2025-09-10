@@ -1,6 +1,8 @@
 use crate::error::{DbFastError, Result};
 use crate::config::Config;
 
+#[allow(clippy::disallowed_methods)]
+
 /// Handle the seed command 
 pub fn handle_seed(output_name: &str, with_seeds: bool) -> Result<()> {
     // Try to load config from current directory

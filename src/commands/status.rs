@@ -2,6 +2,8 @@ use crate::error::{DbFastError, Result};
 use crate::config::Config;
 use std::path::Path;
 
+#[allow(clippy::disallowed_methods)]
+
 /// Handle the status command using current working directory
 pub fn handle_status() -> Result<()> {
     let current_dir = std::env::current_dir()?;

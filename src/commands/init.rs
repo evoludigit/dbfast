@@ -3,6 +3,8 @@ use std::path::Path;
 use crate::error::{DbFastError, Result};
 use crate::config::Config;
 
+#[allow(clippy::disallowed_methods)]
+
 /// Handle the init command with default output directory
 pub fn handle_init(repo_dir: &str, template_name: &str) -> Result<()> {
     handle_init_with_output_dir(repo_dir, template_name, &std::env::current_dir()?)

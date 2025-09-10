@@ -2,6 +2,8 @@ use dbfast::cli::{Cli, Commands};
 use dbfast::commands::{init, seed, status};
 use std::process;
 
+// Allow println in main CLI binary
+#[allow(clippy::disallowed_methods)]
 fn main() {
     let cli = Cli::parse();
 
