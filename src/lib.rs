@@ -18,6 +18,8 @@
     clippy::unused_async
 )]
 
+/// Backup management
+pub mod backup;
 /// CLI interface for `DBFast`
 pub mod cli;
 /// CLI commands
@@ -32,6 +34,8 @@ pub mod environment;
 /// Error handling
 pub mod error;
 pub mod query;
+/// Remote deployment management
+pub mod remote;
 /// File scanning and hash calculation
 pub mod scanner;
 
