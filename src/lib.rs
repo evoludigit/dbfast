@@ -27,6 +27,8 @@ pub mod config;
 pub mod connection;
 /// Database connection and pooling
 pub mod database;
+/// Environment filtering for deployments
+pub mod environment;
 /// Error handling
 pub mod error;
 pub mod query;
