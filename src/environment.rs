@@ -34,13 +34,13 @@ pub enum FilterError {
     #[error("Invalid glob pattern: {pattern}")]
     InvalidPattern {
         /// The invalid pattern that caused the error
-        pattern: String 
+        pattern: String,
     },
     /// Path processing error
     #[error("Failed to process path: {path}")]
-    PathError { 
+    PathError {
         /// The path that caused the error
-        path: String 
+        path: String,
     },
 }
 
@@ -52,12 +52,10 @@ impl EnvironmentConfig {
     pub fn filter_files(&self, all_files: &[PathBuf]) -> Result<Vec<PathBuf>, FilterError> {
         all_files
             .iter()
-            .filter_map(|file| {
-                match self.should_include_file(file) {
-                    Ok(true) => Some(Ok(file.clone())),
-                    Ok(false) => None,
-                    Err(e) => Some(Err(e)),
-                }
+            .filter_map(|file| match self.should_include_file(file) {
+                Ok(true) => Some(Ok(file.clone())),
+                Ok(false) => None,
+                Err(e) => Some(Err(e)),
             })
             .collect()
     }
@@ -83,7 +81,7 @@ impl EnvironmentConfig {
         let file_str = file.to_string_lossy();
         let directory = self.extract_directory(&file_str)?;
         let filename = self.extract_filename(&file_str)?;
-        
+
         self.apply_filters(&directory, &filename, &file_str)
     }
 
@@ -91,8 +89,8 @@ impl EnvironmentConfig {
     /// For paths like "tests/fixtures/sql/0_schema/tables.sql", extracts "0_schema"
     fn extract_directory(&self, file_str: &str) -> Result<String, FilterError> {
         let path_parts: Vec<&str> = file_str.split('/').collect();
-        
-        // Find the directory after "sql" 
+
+        // Find the directory after "sql"
         let mut found_sql = false;
         for part in &path_parts {
             if *part == "sql" {
@@ -103,7 +101,7 @@ impl EnvironmentConfig {
                 return Ok(part.to_string());
             }
         }
-        
+
         Ok(String::new())
     }
 
@@ -113,7 +111,12 @@ impl EnvironmentConfig {
     }
 
     /// Apply include/exclude filters to determine if file should be included
-    fn apply_filters(&self, dir: &str, filename: &str, _file_str: &str) -> Result<bool, FilterError> {
+    fn apply_filters(
+        &self,
+        dir: &str,
+        filename: &str,
+        _file_str: &str,
+    ) -> Result<bool, FilterError> {
         // 1. Apply directory include filter
         if let Some(include_dirs) = &self.include_directories {
             if !include_dirs.iter().any(|d| dir == d) {
@@ -139,11 +142,15 @@ impl EnvironmentConfig {
     }
 
     /// Check if filename matches any exclude patterns
-    fn matches_exclude_pattern(&self, filename: &str, patterns: &[String]) -> Result<bool, FilterError> {
+    fn matches_exclude_pattern(
+        &self,
+        filename: &str,
+        patterns: &[String],
+    ) -> Result<bool, FilterError> {
         for pattern in patterns {
             if pattern.starts_with("**/") {
                 let pattern_without_glob = &pattern[3..];
-                
+
                 // Handle patterns like "prod_*.sql" or "test_*.sql"
                 if pattern_without_glob.ends_with("*.sql") {
                     let prefix = pattern_without_glob.trim_end_matches("*.sql");
