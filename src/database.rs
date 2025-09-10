@@ -1,4 +1,4 @@
-/// Database connection and pooling for DBFast
+/// Database connection and pooling for `DBFast`
 use crate::config::DatabaseConfig;
 use bb8::{Pool, RunError};
 use bb8_postgres::PostgresConnectionManager;

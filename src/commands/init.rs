@@ -4,7 +4,6 @@ use std::fs;
 use std::path::Path;
 
 #[allow(clippy::disallowed_methods)]
-
 /// Handle the init command with default output directory
 pub fn handle_init(repo_dir: &str, template_name: &str) -> Result<()> {
     handle_init_with_output_dir(repo_dir, template_name, &std::env::current_dir()?)
@@ -33,8 +32,8 @@ pub fn handle_init_with_output_dir(
     fs::write(&config_path, config_content)?;
 
     println!("Successfully initialized DBFast configuration");
-    println!("Repository: {}", repo_dir);
-    println!("Template: {}", template_name);
+    println!("Repository: {repo_dir}");
+    println!("Template: {template_name}");
     println!("Configuration saved to: {}", config_path.display());
 
     Ok(())

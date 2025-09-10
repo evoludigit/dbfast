@@ -3,7 +3,6 @@ use crate::error::{DbFastError, Result};
 use std::path::Path;
 
 #[allow(clippy::disallowed_methods)]
-
 /// Handle the status command using current working directory
 pub fn handle_status() -> Result<()> {
     let current_dir = std::env::current_dir()?;
@@ -28,7 +27,7 @@ pub fn handle_status_in_dir(dir: &Path) -> Result<()> {
     // Load and display config information
     let config =
         Config::from_file(&config_path).map_err(|e| DbFastError::ConfigCreationFailed {
-            message: format!("Failed to load config: {}", e),
+            message: format!("Failed to load config: {e}"),
         })?;
 
     println!("\n📋 Configuration Details:");
@@ -53,7 +52,7 @@ pub fn handle_status_in_dir(dir: &Path) -> Result<()> {
         for dir_name in &common_dirs {
             let dir_path = repo_path.join(dir_name);
             if dir_path.exists() {
-                println!("   📁 {}/", dir_name);
+                println!("   📁 {dir_name}/");
             }
         }
     } else {
