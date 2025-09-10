@@ -10,6 +10,10 @@ repository = "https://github.com/evoludigit/dbfast"
 keywords = ["database", "performance"]
 categories = ["database"]
 
+[[bin]]
+name = "dbfast"
+path = "src/main.rs"
+
 [dependencies]
 clap = { version = "4.4", features = ["derive"] }
 tokio = { version = "1.35", features = ["full"] }
