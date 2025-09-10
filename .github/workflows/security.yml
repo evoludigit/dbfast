@@ -25,20 +25,37 @@ jobs:
           # Full history for better security analysis
           fetch-depth: 0
 
+      - name: Check if PR only contains docs changes
+        id: docs_check
+        if: github.event_name == 'pull_request'
+        run: |
+          FILES_CHANGED=$(gh pr view ${{ github.event.number }} --json files --jq '.files[].path')
+          if echo "$FILES_CHANGED" | grep -v -E '\.(md|txt)$|^docs/|\.github/.*\.(md|yml|yaml)$' | grep -q .; then
+            echo "has_non_docs_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_non_docs_changes=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Install Rust stable
+        if: github.event_name != 'pull_request' || steps.docs_check.outputs.has_non_docs_changes == 'true'
         uses: dtolnay/rust-toolchain@stable
 
       - name: Setup Rust cache
+        if: github.event_name != 'pull_request' || steps.docs_check.outputs.has_non_docs_changes == 'true'
         uses: Swatinem/rust-cache@v2
         with:
           key: security-${{ hashFiles('Cargo.lock') }}
 
       - name: Install security tools
+        if: github.event_name != 'pull_request' || steps.docs_check.outputs.has_non_docs_changes == 'true'
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-audit,cargo-deny,cargo-outdated
 
       - name: Run cargo audit (security vulnerabilities)
+        if: github.event_name != 'pull_request' || steps.docs_check.outputs.has_non_docs_changes == 'true'
         run: |
           cargo audit --json | tee audit-report.json
           # Don't fail CI for advisory warnings in scheduled runs
@@ -47,15 +64,22 @@ jobs:
           fi
 
       - name: Run cargo deny (license/security policy)
+        if: github.event_name != 'pull_request' || steps.docs_check.outputs.has_non_docs_changes == 'true'
         run: cargo deny check --hide-inclusion-graph
 
       - name: Check for outdated dependencies
+        if: github.event_name != 'pull_request' || steps.docs_check.outputs.has_non_docs_changes == 'true'
         run: cargo outdated --exit-code 1
         continue-on-error: true
 
+      - name: Skip security audit for docs-only changes
+        if: github.event_name == 'pull_request' && steps.docs_check.outputs.has_non_docs_changes == 'false'
+        run: |
+          echo "✅ Skipping security audit for documentation/CI-only changes"
+
       - name: Upload security report
+        if: always() && (github.event_name != 'pull_request' || steps.docs_check.outputs.has_non_docs_changes == 'true')
         uses: actions/upload-artifact@v4
-        if: always()
         with:
           name: security-report
           path: |
