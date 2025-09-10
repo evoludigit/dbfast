@@ -1,0 +1,56 @@
+# Auto-assignment configuration for PRs
+# Automatically assigns reviewers based on files changed
+
+# Add reviewers to PR automatically
+addReviewers: true
+
+# Add assignees to PR automatically  
+addAssignees: true
+
+# Default reviewers (will be assigned to all PRs)
+reviewers:
+  - evoludigit
+
+# Default assignees
+assignees: []
+
+# Skip adding reviewers if PR is in draft
+skipDraft: true
+
+# File path based assignments
+reviewers:
+  # Core system changes
+  "src/core/**/*":
+    - evoludigit
+    
+  # CLI changes
+  "src/cli/**/*":
+    - evoludigit
+    
+  # Database related changes
+  "src/db/**/*":
+    - evoludigit
+    
+  # CI/CD changes
+  ".github/**/*":
+    - evoludigit
+    
+  # Security configurations
+  "deny.toml":
+    - evoludigit
+    
+  # Dependencies
+  "Cargo.toml":
+    - evoludigit
+
+# Number of reviewers to assign (max)
+numberOfReviewers: 1
+
+# Number of assignees to assign (max)  
+numberOfAssignees: 0
+
+# Skip adding reviewers if the PR author is in this list
+skipKeywords:
+  - WIP
+  - wip
+  - draft

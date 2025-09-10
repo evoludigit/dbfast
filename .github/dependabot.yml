@@ -1,5 +1,5 @@
-# Dependabot configuration
-# Generated on 2025-09-10
+# Enhanced Dependabot configuration for professional dependency management
+# Generated on 2025-09-10 - Enhanced for professional standards
 
 version: 2
 updates:
@@ -10,7 +10,7 @@ updates:
       interval: "weekly"
       day: "monday"
       time: "09:00"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 15
     reviewers:
       - "evoludigit"
     assignees:
@@ -21,36 +21,69 @@ updates:
       include: "scope"
     labels:
       - "dependencies"
+      - "auto-merge"
+    # Security updates get priority
     allow:
       - dependency-type: "direct"
       - dependency-type: "indirect"
+    # Smart ignoring strategy
     ignore:
-      # Ignore major version updates for now
-      - dependency-name: "*"
+      # Ignore major version updates for critical dependencies
+      - dependency-name: "tokio"
         update-types: ["version-update:semver-major"]
+      - dependency-name: "tokio-postgres" 
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "clap"
+        update-types: ["version-update:semver-major"]
+    # Enhanced grouping for better PR management
     groups:
-      # Group tokio-related dependencies
-      tokio:
+      # Database-related dependencies
+      database:
+        patterns:
+          - "tokio-postgres"
+          - "bb8*"
+          - "sqlx*"
+      # Async runtime and utilities
+      async-stack:
         patterns:
           - "tokio*"
-      # Group serde-related dependencies  
-      serde:
+          - "futures*"
+          - "async-*"
+      # Serialization stack
+      serialization:
         patterns:
           - "serde*"
-      # Group development dependencies
+          - "toml"
+          - "serde_json"
+      # CLI and user interface
+      cli-tools:
+        patterns:
+          - "clap*"
+          - "console"
+          - "indicatif"
+      # Security and crypto
+      security:
+        patterns:
+          - "*hash*"
+          - "rand*"
+          - "crypto*"
+      # Development and testing dependencies
       dev-dependencies:
         dependency-type: "development"
         patterns:
-          - "*"
+          - "criterion*"
+          - "tempfile"
+          - "testcontainers*"
+          - "proptest*"
 
-  # Enable version updates for GitHub Actions
+  # Enhanced GitHub Actions updates
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday" 
       time: "09:00"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 8
     reviewers:
       - "evoludigit"
     assignees:
@@ -61,3 +94,40 @@ updates:
     labels:
       - "ci"
       - "dependencies"
+      - "auto-merge"
+    # Group related actions together
+    groups:
+      # Core GitHub actions
+      github-actions:
+        patterns:
+          - "actions/*"
+      # Security-related actions
+      security-actions:
+        patterns:
+          - "github/codeql-action*"
+          - "trufflesecurity/*"
+          - "securecodewarrior/*"
+      # Build and release actions
+      build-actions:
+        patterns:
+          - "dtolnay/*"
+          - "taiki-e/*"
+          - "softprops/*"
+
+  # Docker updates (if using containers)
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "evoludigit"
+    labels:
+      - "docker"
+      - "dependencies"
+    # Only update patch versions for base images
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]

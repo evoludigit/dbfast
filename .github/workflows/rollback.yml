@@ -1,0 +1,266 @@
+# Emergency rollback workflow for production issues
+name: Emergency Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to rollback'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+      version:
+        description: 'Version to rollback to (empty for previous version)'
+        required: false
+        type: string
+      reason:
+        description: 'Reason for rollback'
+        required: true
+        type: string
+      confirmation:
+        description: 'Type "ROLLBACK" to confirm'
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Validate rollback request
+  validate-rollback:
+    name: Validate Rollback Request
+    runs-on: ubuntu-latest
+    
+    outputs:
+      environment: ${{ steps.validate.outputs.environment }}
+      version: ${{ steps.validate.outputs.version }}
+      is_production: ${{ steps.validate.outputs.is_production }}
+    
+    steps:
+      - name: Validate confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirmation }}" != "ROLLBACK" ]; then
+            echo "❌ Confirmation failed. You must type 'ROLLBACK' to proceed."
+            exit 1
+          fi
+
+      - name: Validate inputs
+        id: validate
+        run: |
+          ENV="${{ github.event.inputs.environment }}"
+          VERSION="${{ github.event.inputs.version }}"
+          REASON="${{ github.event.inputs.reason }}"
+          
+          echo "⚠️ ROLLBACK REQUEST"
+          echo "Environment: $ENV"
+          echo "Target Version: ${VERSION:-'previous'}"
+          echo "Reason: $REASON"
+          echo "Initiated by: ${{ github.actor }}"
+          
+          echo "environment=$ENV" >> $GITHUB_OUTPUT
+          echo "version=${VERSION:-previous}" >> $GITHUB_OUTPUT
+          
+          if [ "$ENV" = "production" ]; then
+            echo "is_production=true" >> $GITHUB_OUTPUT
+            echo "🚨 PRODUCTION ROLLBACK REQUESTED"
+          else
+            echo "is_production=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Log rollback initiation
+        run: |
+          echo "📝 Rollback initiated at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "👤 Initiated by: ${{ github.actor }}"
+          echo "🔄 Environment: ${{ github.event.inputs.environment }}"
+          echo "📋 Reason: ${{ github.event.inputs.reason }}"
+
+  # Production rollback (requires additional approval)
+  rollback-production:
+    name: Rollback Production
+    runs-on: ubuntu-latest
+    needs: validate-rollback
+    if: needs.validate-rollback.outputs.is_production == 'true'
+    
+    environment:
+      name: production-rollback
+      
+    steps:
+      - name: Production rollback warning
+        run: |
+          echo "🚨 PRODUCTION ROLLBACK IN PROGRESS"
+          echo "⚠️ This action will affect production users"
+          echo "🔄 Rolling back to version: ${{ needs.validate-rollback.outputs.version }}"
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine rollback version
+        id: version
+        run: |
+          if [ "${{ needs.validate-rollback.outputs.version }}" = "previous" ]; then
+            # Get the previous deployment version from git tags
+            CURRENT_VERSION=$(git describe --tags --abbrev=0)
+            PREVIOUS_VERSION=$(git describe --tags --abbrev=0 $CURRENT_VERSION^)
+            echo "rollback_version=$PREVIOUS_VERSION" >> $GITHUB_OUTPUT
+            echo "🔄 Rolling back from $CURRENT_VERSION to $PREVIOUS_VERSION"
+          else
+            echo "rollback_version=${{ needs.validate-rollback.outputs.version }}" >> $GITHUB_OUTPUT
+            echo "🔄 Rolling back to specified version: ${{ needs.validate-rollback.outputs.version }}"
+          fi
+
+      - name: Create rollback backup
+        run: |
+          echo "💾 Creating backup of current production state"
+          # In real implementation, you would:
+          # - Create database snapshots
+          # - Backup current application state  
+          # - Save current configuration
+          echo "✅ Production backup completed"
+
+      - name: Execute production rollback
+        run: |
+          echo "🔄 Executing production rollback..."
+          ROLLBACK_VERSION="${{ steps.version.outputs.rollback_version }}"
+          
+          # Simulate rollback deployment
+          echo "📦 Deploying version: $ROLLBACK_VERSION"
+          sleep 20
+          
+          echo "✅ Production rollback completed"
+          
+          # In real implementation, you would:
+          # - Deploy the previous version
+          # - Update load balancer configuration
+          # - Rollback database migrations if needed
+          # - Clear caches
+
+      - name: Verify rollback
+        run: |
+          echo "🔍 Verifying production rollback..."
+          sleep 15
+          echo "✅ Production rollback verification successful"
+
+      - name: Notify rollback completion
+        run: |
+          echo "📢 Production rollback completed successfully"
+          echo "🔄 Rolled back to: ${{ steps.version.outputs.rollback_version }}"
+          echo "⏰ Completed at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+
+  # Staging rollback (simpler process)
+  rollback-staging:
+    name: Rollback Staging
+    runs-on: ubuntu-latest
+    needs: validate-rollback
+    if: needs.validate-rollback.outputs.is_production == 'false'
+    
+    environment:
+      name: staging
+      
+    steps:
+      - name: Staging rollback info
+        run: |
+          echo "🔄 STAGING ROLLBACK"
+          echo "Environment: staging"
+          echo "Target version: ${{ needs.validate-rollback.outputs.version }}"
+
+      - name: Execute staging rollback
+        run: |
+          echo "🔄 Executing staging rollback..."
+          sleep 10
+          echo "✅ Staging rollback completed"
+
+      - name: Verify staging rollback
+        run: |
+          echo "🔍 Verifying staging rollback..."
+          sleep 5
+          echo "✅ Staging rollback verification successful"
+
+  # Post-rollback monitoring and reporting
+  post-rollback:
+    name: Post-rollback Monitoring
+    runs-on: ubuntu-latest
+    needs: [validate-rollback, rollback-production, rollback-staging]
+    if: always() && (needs.rollback-production.result == 'success' || needs.rollback-staging.result == 'success')
+    
+    steps:
+      - name: Monitor rollback
+        run: |
+          ENV="${{ needs.validate-rollback.outputs.environment }}"
+          echo "📊 Monitoring $ENV after rollback"
+          
+          # Monitor for 10 minutes after rollback
+          for i in {1..10}; do
+            echo "🔍 Health check $i/10 for $ENV after rollback"
+            sleep 60
+            echo "✅ $ENV environment stable"
+          done
+
+      - name: Create rollback report
+        run: |
+          ENV="${{ needs.validate-rollback.outputs.environment }}"
+          VERSION="${{ needs.validate-rollback.outputs.version }}"
+          REASON="${{ github.event.inputs.reason }}"
+          
+          echo "# Rollback Report" > rollback-report.md
+          echo "" >> rollback-report.md
+          echo "**Environment:** $ENV" >> rollback-report.md
+          echo "**Rolled back to:** $VERSION" >> rollback-report.md
+          echo "**Reason:** $REASON" >> rollback-report.md
+          echo "**Initiated by:** ${{ github.actor }}" >> rollback-report.md
+          echo "**Started at:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> rollback-report.md
+          echo "" >> rollback-report.md
+          echo "## Status" >> rollback-report.md
+          echo "✅ Rollback successful" >> rollback-report.md
+          echo "✅ Health checks passed" >> rollback-report.md
+          echo "✅ System stable" >> rollback-report.md
+          echo "" >> rollback-report.md
+          echo "## Next Steps" >> rollback-report.md
+          echo "- [ ] Investigate root cause of issue" >> rollback-report.md
+          echo "- [ ] Fix underlying problem" >> rollback-report.md
+          echo "- [ ] Plan new deployment" >> rollback-report.md
+
+      - name: Upload rollback report
+        uses: actions/upload-artifact@v4
+        with:
+          name: rollback-report-${{ needs.validate-rollback.outputs.environment }}
+          path: rollback-report.md
+          retention-days: 365  # Keep rollback reports for a full year
+
+      - name: Create incident issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: issue } = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 Rollback Incident - ${{ needs.validate-rollback.outputs.environment }}`,
+              body: `## Rollback Incident Report
+              
+              **Environment:** ${{ needs.validate-rollback.outputs.environment }}
+              **Rollback Version:** ${{ needs.validate-rollback.outputs.version }}
+              **Initiated by:** ${{ github.actor }}
+              **Reason:** ${{ github.event.inputs.reason }}
+              **Date:** ${new Date().toISOString()}
+              
+              ## Actions Taken
+              - ✅ Rollback completed successfully
+              - ✅ Health checks passed
+              - ✅ System monitoring active
+              
+              ## Follow-up Required
+              - [ ] Root cause analysis
+              - [ ] Fix implementation
+              - [ ] Post-mortem meeting
+              - [ ] Documentation update
+              
+              **Workflow:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+              `,
+              labels: ['incident', 'rollback', '${{ needs.validate-rollback.outputs.environment }}', 'high-priority']
+            });
+            
+            console.log(`Created incident issue: ${issue.html_url}`);

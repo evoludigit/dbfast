@@ -1,0 +1,23 @@
+# Code owners for dbfast repository
+# These users will be automatically requested for review when PRs modify these paths
+
+# Global ownership - all files
+* @evoludigit
+
+# Specific areas of ownership
+/.github/ @evoludigit
+/src/core/ @evoludigit
+/src/config/ @evoludigit
+/Cargo.toml @evoludigit
+/deny.toml @evoludigit
+/.clippy.toml @evoludigit
+
+# CI/CD and security configurations
+/.github/workflows/ @evoludigit
+/.github/dependabot.yml @evoludigit
+/deny.toml @evoludigit
+/.pre-commit-config.yaml @evoludigit
+
+# Documentation
+/README.md @evoludigit
+/docs/ @evoludigit

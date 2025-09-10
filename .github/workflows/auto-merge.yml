@@ -1,0 +1,140 @@
+# Auto-merge workflow for trusted dependency updates
+name: Auto-merge
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+jobs:
+  # Auto-merge dependabot PRs that pass all checks
+  dependabot-auto-merge:
+    name: Dependabot Auto-merge
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]'
+    
+    permissions:
+      contents: write
+      pull-requests: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Wait for status checks
+        uses: fountainhead/action-wait-for-check@v1.2.0
+        id: wait-for-checks
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          checkName: |
+            Quality Checks
+            Test & Coverage
+            Security Audit
+          ref: ${{ github.event.pull_request.head.sha }}
+          timeoutSeconds: 1800  # 30 minutes max wait
+
+      - name: Auto-merge patch updates
+        if: |
+          steps.metadata.outputs.update-type == 'version-update:semver-patch' &&
+          steps.wait-for-checks.outputs.conclusion == 'success'
+        run: |
+          echo "✅ Auto-merging patch update for ${{ steps.metadata.outputs.dependency-names }}"
+          gh pr merge --auto --merge
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Auto-merge minor updates (dev dependencies only)
+        if: |
+          steps.metadata.outputs.update-type == 'version-update:semver-minor' &&
+          steps.metadata.outputs.dependency-type == 'development' &&
+          steps.wait-for-checks.outputs.conclusion == 'success'
+        run: |
+          echo "✅ Auto-merging minor dev dependency update for ${{ steps.metadata.outputs.dependency-names }}"
+          gh pr merge --auto --merge
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Auto-approve safe updates
+        if: |
+          (steps.metadata.outputs.update-type == 'version-update:semver-patch') ||
+          (steps.metadata.outputs.update-type == 'version-update:semver-minor' && steps.metadata.outputs.dependency-type == 'development')
+        run: |
+          echo "✅ Auto-approving safe dependency update"
+          gh pr review --approve --body "✅ Automatically approved safe dependency update"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Comment on major updates
+        if: |
+          steps.metadata.outputs.update-type == 'version-update:semver-major' ||
+          (steps.metadata.outputs.update-type == 'version-update:semver-minor' && steps.metadata.outputs.dependency-type == 'direct')
+        run: |
+          gh pr comment --body "⚠️ **Major/Minor Direct Dependency Update**
+          
+          This PR contains a major version update or minor direct dependency update that requires manual review.
+          
+          **Dependency**: ${{ steps.metadata.outputs.dependency-names }}
+          **Update Type**: ${{ steps.metadata.outputs.update-type }}
+          **Dependency Type**: ${{ steps.metadata.outputs.dependency-type }}
+          
+          Please review the changelog and test thoroughly before merging."
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Auto-merge for other trusted bots (like Renovate, if used)
+  trusted-bot-auto-merge:
+    name: Trusted Bot Auto-merge
+    runs-on: ubuntu-latest
+    if: |
+      contains(fromJson('["renovate[bot]", "dependabot[bot]"]'), github.actor) &&
+      contains(github.event.pull_request.labels.*.name, 'auto-merge')
+    
+    permissions:
+      contents: write
+      pull-requests: write
+    
+    steps:
+      - name: Wait for status checks
+        uses: fountainhead/action-wait-for-check@v1.2.0
+        id: wait-for-checks
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          checkName: |
+            Quality Checks
+            Test & Coverage
+          ref: ${{ github.event.pull_request.head.sha }}
+          timeoutSeconds: 1800
+
+      - name: Auto-merge if checks pass
+        if: steps.wait-for-checks.outputs.conclusion == 'success'
+        run: |
+          echo "✅ Auto-merging trusted bot PR"
+          gh pr merge --auto --squash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Cleanup: remove auto-merge label if checks fail
+  cleanup-auto-merge:
+    name: Cleanup Auto-merge Label
+    runs-on: ubuntu-latest
+    if: |
+      always() &&
+      contains(github.event.pull_request.labels.*.name, 'auto-merge') &&
+      (github.event.action == 'synchronize' || github.event.action == 'reopened')
+    
+    permissions:
+      pull-requests: write
+    
+    steps:
+      - name: Remove auto-merge label on new commits
+        run: |
+          gh pr edit --remove-label auto-merge
+          echo "🏷️ Removed auto-merge label due to new changes"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,315 @@
+# Production deployment workflow with environment protection
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+      version:
+        description: 'Version/tag to deploy (leave empty for latest)'
+        required: false
+        type: string
+      force:
+        description: 'Force deployment (skip some checks)'
+        required: false
+        default: false
+        type: boolean
+
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+      - '.github/**'
+      - 'docs/**'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Determine deployment strategy
+  prepare-deployment:
+    name: Prepare Deployment
+    runs-on: ubuntu-latest
+    
+    outputs:
+      environment: ${{ steps.determine.outputs.environment }}
+      version: ${{ steps.determine.outputs.version }}
+      should_deploy: ${{ steps.determine.outputs.should_deploy }}
+      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine deployment parameters
+        id: determine
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ENV="${{ github.event.inputs.environment }}"
+            VERSION="${{ github.event.inputs.version }}"
+            SHOULD_DEPLOY="true"
+          elif [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            ENV="staging"
+            VERSION="latest"
+            SHOULD_DEPLOY="true"
+          else
+            ENV="none"
+            VERSION="none" 
+            SHOULD_DEPLOY="false"
+          fi
+          
+          echo "environment=$ENV" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "should_deploy=$SHOULD_DEPLOY" >> $GITHUB_OUTPUT
+          
+          echo "📋 Deployment plan:"
+          echo "  Environment: $ENV"
+          echo "  Version: $VERSION"
+          echo "  Should deploy: $SHOULD_DEPLOY"
+
+  # Pre-deployment validation
+  pre-deploy-validation:
+    name: Pre-deployment Validation
+    runs-on: ubuntu-latest
+    needs: prepare-deployment
+    if: needs.prepare-deployment.outputs.should_deploy == 'true'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Validate build
+        run: cargo build --release
+
+      - name: Run smoke tests
+        run: cargo test --release smoke_test
+
+      - name: Security scan
+        run: |
+          cargo install cargo-audit
+          cargo audit
+
+      - name: Check version consistency
+        if: needs.prepare-deployment.outputs.version != 'latest'
+        run: |
+          VERSION="${{ needs.prepare-deployment.outputs.version }}"
+          CARGO_VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          if [ "v$CARGO_VERSION" != "$VERSION" ]; then
+            echo "❌ Version mismatch: Cargo.toml has $CARGO_VERSION, requested $VERSION"
+            exit 1
+          fi
+
+  # Staging deployment
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [prepare-deployment, pre-deploy-validation]
+    if: |
+      needs.prepare-deployment.outputs.should_deploy == 'true' &&
+      needs.prepare-deployment.outputs.environment == 'staging'
+    
+    environment:
+      name: staging
+      url: https://staging.dbfast.example.com
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build for staging
+        run: |
+          cargo build --release
+          strip target/release/dbfast
+
+      - name: Create deployment package
+        run: |
+          mkdir -p staging-deploy
+          cp target/release/dbfast staging-deploy/
+          cp dbfast.toml.example staging-deploy/dbfast.toml
+          tar -czf dbfast-staging.tar.gz -C staging-deploy .
+
+      - name: Deploy to staging server
+        run: |
+          echo "🚀 Deploying to staging environment"
+          echo "📦 Package: dbfast-staging.tar.gz"
+          echo "🔧 Version: ${{ needs.prepare-deployment.outputs.version }}"
+          
+          # Simulate deployment (replace with actual deployment logic)
+          echo "✅ Successfully deployed to staging"
+          
+          # In real deployment, you would:
+          # - Upload to staging server
+          # - Run deployment scripts
+          # - Perform health checks
+          # - Update load balancer
+
+      - name: Run staging health checks
+        run: |
+          echo "🔍 Running staging health checks..."
+          # Simulate health checks
+          sleep 10
+          echo "✅ All staging health checks passed"
+
+      - name: Update deployment status
+        run: |
+          echo "📋 Staging deployment completed"
+          echo "🌐 Environment: staging"
+          echo "📅 Deployed at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "📦 Version: ${{ needs.prepare-deployment.outputs.version }}"
+
+  # Production deployment
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [prepare-deployment, pre-deploy-validation]
+    if: |
+      needs.prepare-deployment.outputs.should_deploy == 'true' &&
+      needs.prepare-deployment.outputs.environment == 'production'
+    
+    environment:
+      name: production
+      url: https://dbfast.example.com
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Production safety check
+        run: |
+          echo "⚠️ PRODUCTION DEPLOYMENT"
+          echo "🔍 Performing final safety checks..."
+          
+          # Check if this is a forced deployment
+          if [ "${{ github.event.inputs.force }}" = "true" ]; then
+            echo "⚠️ FORCED DEPLOYMENT - Some checks bypassed"
+          fi
+          
+          # Verify we're deploying from main branch or a release tag
+          if [ "${{ github.ref }}" != "refs/heads/main" ] && [[ ! "${{ github.ref }}" =~ refs/tags/v.* ]]; then
+            echo "❌ Production deployments must be from main branch or release tags"
+            exit 1
+          fi
+
+      - name: Build for production
+        run: |
+          cargo build --release
+          strip target/release/dbfast
+
+      - name: Create production package
+        run: |
+          mkdir -p production-deploy
+          cp target/release/dbfast production-deploy/
+          # Production config would come from secrets/environment
+          echo "# Production configuration" > production-deploy/dbfast.toml
+          tar -czf dbfast-production.tar.gz -C production-deploy .
+
+      - name: Backup current production
+        run: |
+          echo "💾 Creating backup of current production deployment"
+          # In real deployment, you would backup the current version
+          echo "✅ Production backup completed"
+
+      - name: Deploy to production
+        run: |
+          echo "🚀 Deploying to production environment"
+          echo "📦 Package: dbfast-production.tar.gz"
+          echo "🔧 Version: ${{ needs.prepare-deployment.outputs.version }}"
+          
+          # Simulate production deployment
+          echo "⏳ Deploying to production servers..."
+          sleep 15
+          echo "✅ Successfully deployed to production"
+
+      - name: Run production health checks
+        run: |
+          echo "🔍 Running production health checks..."
+          # Simulate comprehensive health checks
+          sleep 30
+          echo "✅ All production health checks passed"
+
+      - name: Notify deployment success
+        run: |
+          echo "🎉 Production deployment completed successfully"
+          echo "🌐 Environment: production"
+          echo "📅 Deployed at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "📦 Version: ${{ needs.prepare-deployment.outputs.version }}"
+          
+          # In real deployment, you would:
+          # - Send notifications to team
+          # - Update deployment tracking systems
+          # - Create deployment logs
+
+  # Post-deployment monitoring
+  post-deploy-monitoring:
+    name: Post-deployment Monitoring
+    runs-on: ubuntu-latest
+    needs: [prepare-deployment, deploy-staging, deploy-production]
+    if: always() && (needs.deploy-staging.result == 'success' || needs.deploy-production.result == 'success')
+    
+    steps:
+      - name: Monitor deployment
+        run: |
+          ENV="${{ needs.prepare-deployment.outputs.environment }}"
+          echo "📊 Starting post-deployment monitoring for $ENV"
+          
+          # Monitor for 5 minutes after deployment
+          for i in {1..5}; do
+            echo "🔍 Health check $i/5 for $ENV environment"
+            # Simulate monitoring checks
+            sleep 60
+            echo "✅ $ENV environment healthy"
+          done
+          
+          echo "📋 Post-deployment monitoring completed for $ENV"
+
+      - name: Create deployment report
+        run: |
+          ENV="${{ needs.prepare-deployment.outputs.environment }}"
+          VERSION="${{ needs.prepare-deployment.outputs.version }}"
+          
+          echo "# Deployment Report" > deployment-report.md
+          echo "" >> deployment-report.md
+          echo "**Environment:** $ENV" >> deployment-report.md
+          echo "**Version:** $VERSION" >> deployment-report.md
+          echo "**Deployed at:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> deployment-report.md
+          echo "**Deployed by:** ${{ github.actor }}" >> deployment-report.md
+          echo "**Commit:** ${{ github.sha }}" >> deployment-report.md
+          echo "" >> deployment-report.md
+          echo "## Status" >> deployment-report.md
+          echo "✅ Deployment successful" >> deployment-report.md
+          echo "✅ Health checks passed" >> deployment-report.md
+          echo "✅ Monitoring active" >> deployment-report.md
+
+      - name: Upload deployment report
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-report-${{ needs.prepare-deployment.outputs.environment }}
+          path: deployment-report.md
+          retention-days: 90

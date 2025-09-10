@@ -1,0 +1,202 @@
+# Pull Request validation workflow
+name: PR Validation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main, dev]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Validate PR metadata
+  pr-metadata:
+    name: PR Metadata Validation
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate PR title
+        uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            fix
+            feat
+            docs
+            style
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            revert
+          requireScope: false
+          disallowScopes: |
+            release
+          subjectPattern: ^(?![A-Z]).+$
+          subjectPatternError: |
+            The subject "{subject}" found in the pull request title "{title}"
+            didn't match the configured pattern. Please ensure that the subject
+            doesn't start with an uppercase character.
+
+      - name: Check PR size
+        uses: pascalgn/size-label-action@v0.5.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          sizes: >
+            {
+              "0": "XS",
+              "10": "S", 
+              "100": "M",
+              "500": "L",
+              "1000": "XL",
+              "5000": "XXL"
+            }
+
+      - name: Validate branch naming
+        run: |
+          BRANCH_NAME="${{ github.head_ref }}"
+          # Allow: feature/, fix/, docs/, chore/, etc.
+          if [[ ! "$BRANCH_NAME" =~ ^(feature|fix|docs|chore|refactor|test|ci|perf)/.+ ]]; then
+            echo "❌ Branch name '$BRANCH_NAME' doesn't follow naming convention"
+            echo "✅ Use: feature/description, fix/description, docs/description, etc."
+            exit 1
+          fi
+          echo "✅ Branch name follows convention"
+
+  # Quick smoke tests
+  smoke-test:
+    name: Smoke Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check compilation
+        run: cargo check --all-targets
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Quick clippy check
+        run: cargo clippy --all-targets -- -D warnings
+
+  # Check for breaking changes
+  breaking-changes:
+    name: Breaking Changes Detection
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-semver-checks
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-semver-checks
+
+      - name: Check for breaking changes
+        run: |
+          # Only check if this isn't the first commit
+          if git rev-parse HEAD~1 >/dev/null 2>&1; then
+            cargo semver-checks check-release
+          else
+            echo "Skipping semver check for initial commit"
+          fi
+        continue-on-error: true
+
+  # Performance regression check
+  performance-check:
+    name: Performance Check
+    runs-on: ubuntu-latest
+    if: contains(github.event.pull_request.labels.*.name, 'performance') || contains(github.event.pull_request.body, '[benchmark]')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run benchmarks
+        run: |
+          cargo bench --bench benchmarks -- --output-format json | tee benchmark-results.json
+          echo "📊 Benchmark results saved to benchmark-results.json"
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: benchmark-results.json
+          retention-days: 30
+
+  # Auto-assign reviewers based on files changed
+  auto-assign:
+    name: Auto-assign Reviewers
+    runs-on: ubuntu-latest
+    if: github.event.action == 'opened'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Auto-assign based on CODEOWNERS
+        uses: kentaro-m/auto-assign-action@v1.2.5
+        with:
+          configuration-path: '.github/auto-assign.yml'
+
+  # Label PRs automatically
+  auto-label:
+    name: Auto-label PR
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Label PR based on files changed
+        uses: actions/labeler@v5
+        with:
+          configuration-path: '.github/labeler.yml'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+  # Check if PR is ready for review
+  pr-ready:
+    name: PR Ready Check
+    runs-on: ubuntu-latest
+    needs: [pr-metadata, smoke-test]
+    
+    steps:
+      - name: Check if PR is draft
+        if: github.event.pull_request.draft == true
+        run: |
+          echo "🚧 This is a draft PR - skipping full validation"
+          echo "Convert to ready for review when ready for full CI/CD pipeline"
+
+      - name: PR Ready for Review
+        if: github.event.pull_request.draft == false
+        run: |
+          echo "✅ PR is ready for review"
+          echo "📋 Full CI/CD pipeline will run automatically"
