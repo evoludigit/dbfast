@@ -14,8 +14,12 @@
 
 /// CLI interface for DBFast
 pub mod cli;
+/// CLI commands
+pub mod commands;
 /// Configuration management for DBFast
 pub mod config;
+/// Error handling
+pub mod error;
 pub mod connection;
 /// Database connection and pooling
 pub mod database;
