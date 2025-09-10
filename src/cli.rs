@@ -5,7 +5,9 @@ use clap::{Parser, Subcommand};
 #[command(name = "dbfast")]
 #[command(version = crate::VERSION)]
 #[command(about = "DBFast - Lightning-Fast PostgreSQL Database Seeding")]
-#[command(long_about = "Transform database fixtures from a 60-second bottleneck into a 100ms delight")]
+#[command(
+    long_about = "Transform database fixtures from a 60-second bottleneck into a 100ms delight"
+)]
 pub struct Cli {
     /// The command to execute
     #[command(subcommand)]

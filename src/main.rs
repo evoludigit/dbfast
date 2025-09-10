@@ -8,7 +8,10 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Some(Commands::Init { repo_dir, template_name }) => {
+        Some(Commands::Init {
+            repo_dir,
+            template_name,
+        }) => {
             if let Err(e) = init::handle_init(&repo_dir, &template_name) {
                 eprintln!("Error: {}", e);
                 process::exit(1);

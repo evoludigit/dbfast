@@ -83,7 +83,10 @@ impl Config {
             "production".to_string(),
             Environment {
                 include_directories: vec!["0_schema".to_string(), "6_migration".to_string()],
-                exclude_directories: vec!["1_seed_common".to_string(), "2_seed_backend".to_string()],
+                exclude_directories: vec![
+                    "1_seed_common".to_string(),
+                    "2_seed_backend".to_string(),
+                ],
             },
         );
 

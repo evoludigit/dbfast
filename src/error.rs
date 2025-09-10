@@ -7,20 +7,20 @@ pub enum DbFastError {
     #[error("Repository directory does not exist: {path}")]
     RepoDirectoryNotFound {
         /// The path that was not found
-        path: String
+        path: String,
     },
-    
+
     /// Configuration file creation failed
     #[error("Failed to create configuration file: {message}")]
     ConfigCreationFailed {
         /// Error message details
-        message: String
+        message: String,
     },
-    
+
     /// IO error wrapper
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-    
+
     /// TOML serialization error wrapper
     #[error("TOML serialization error: {0}")]
     TomlSer(#[from] toml::ser::Error),
