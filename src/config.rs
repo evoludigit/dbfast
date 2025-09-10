@@ -10,7 +10,7 @@ pub enum ConfigError {
     /// IO error occurred while reading config file
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-    
+
     /// TOML parsing error occurred
     #[error("TOML parsing error: {0}")]
     Toml(#[from] toml::de::Error),

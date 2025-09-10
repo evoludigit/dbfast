@@ -1,10 +1,10 @@
-/// File scanning and hash calculation for change detection
-use std::path::{Path, PathBuf};
 use std::fs;
 use std::io;
+/// File scanning and hash calculation for change detection
+use std::path::{Path, PathBuf};
+use thiserror::Error;
 use walkdir::WalkDir;
 use xxhash_rust::xxh3::xxh3_64;
-use thiserror::Error;
 
 /// Scanner-related errors
 #[derive(Debug, Error)]
@@ -12,7 +12,7 @@ pub enum ScannerError {
     /// IO error occurred while scanning files
     #[error("IO error: {0}")]
     Io(#[from] io::Error),
-    
+
     /// File walking error
     #[error("Walk error: {0}")]
     Walk(#[from] walkdir::Error),
@@ -43,7 +43,7 @@ impl FileScanner {
             root_path: path.as_ref().to_path_buf(),
         }
     }
-    
+
     /// Scan for SQL files and calculate their hashes for change detection
     ///
     /// This method walks the directory tree recursively, finds all `.sql` files,
@@ -54,20 +54,20 @@ impl FileScanner {
     /// sorted by path for consistent ordering.
     pub fn scan(&self) -> Result<Vec<ScannedFile>, ScannerError> {
         let mut files = Vec::new();
-        
+
         for entry in WalkDir::new(&self.root_path)
             .follow_links(false)
             .into_iter()
         {
             let entry = entry?;
             let path = entry.path();
-            
+
             // Only include SQL files
             if let Some(extension) = path.extension() {
                 if extension == "sql" {
                     let contents = fs::read(path)?;
                     let hash = xxh3_64(&contents);
-                    
+
                     files.push(ScannedFile {
                         path: path.to_path_buf(),
                         hash: format!("{:016x}", hash),
@@ -75,10 +75,10 @@ impl FileScanner {
                 }
             }
         }
-        
+
         // Sort by path for consistent ordering
         files.sort_by(|a, b| a.path.cmp(&b.path));
-        
+
         Ok(files)
     }
 }

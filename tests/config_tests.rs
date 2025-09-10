@@ -9,7 +9,7 @@ fn test_config_loading() {
     assert_eq!(config.repository.path, "./db");
 }
 
-#[test] 
+#[test]
 fn test_config_missing_file() {
     let result = Config::from_file("nonexistent.toml");
     assert!(result.is_err());
