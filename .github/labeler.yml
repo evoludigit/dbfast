@@ -13,6 +13,9 @@
 "area: config":
   - 'src/config/**/*'
   - 'dbfast.toml*'
+  - '.clippy.toml'
+  - 'rustfmt.toml'
+  - 'rust-toolchain.toml'
 
 "area: database":
   - 'src/db/**/*'
@@ -38,12 +41,6 @@
   - 'README.md'
   - 'docs/**/*'
   - '**/*.md'
-
-# Configuration files
-"area: config":
-  - '.clippy.toml'
-  - 'rustfmt.toml'
-  - 'rust-toolchain.toml'
 
 # Size labels (these work with size-label-action)
 "size: XS":
