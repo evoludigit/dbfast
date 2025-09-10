@@ -1,5 +1,5 @@
 use dbfast::cli::{Cli, Commands};
-use dbfast::commands::{init, seed};
+use dbfast::commands::{init, seed, status};
 use std::process;
 
 fn main() {
@@ -19,7 +19,10 @@ fn main() {
             }
         }
         Some(Commands::Status) => {
-            println!("DBFast status check");
+            if let Err(e) = status::handle_status() {
+                eprintln!("Error: {}", e);
+                process::exit(1);
+            }
         }
         None => {
             println!("DBFast - Use --help for available commands");
