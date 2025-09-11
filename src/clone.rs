@@ -76,6 +76,83 @@ impl CloneManager {
         Self { pool }
     }
 
+    /// Validate database name for security and PostgreSQL compatibility
+    /// 
+    /// # Arguments
+    /// * `name` - Database name to validate
+    /// 
+    /// # Returns
+    /// * `Ok(())` if name is valid
+    /// * `Err(CloneError::InvalidDatabaseName)` if name is invalid
+    pub fn validate_database_name(name: &str) -> CloneResult<()> {
+        // Basic security checks for SQL injection prevention
+        if name.contains('\'') || name.contains(';') || name.contains('-') || name.contains('.') {
+            return Err(CloneError::InvalidDatabaseName {
+                name: name.to_string(),
+                reason: "Database name contains invalid characters that could be used for SQL injection".to_string(),
+            });
+        }
+
+        // Check for empty name
+        if name.is_empty() {
+            return Err(CloneError::InvalidDatabaseName {
+                name: name.to_string(),
+                reason: "Database name cannot be empty".to_string(),
+            });
+        }
+
+        // Check for too short names
+        if name.len() < 2 {
+            return Err(CloneError::InvalidDatabaseName {
+                name: name.to_string(),
+                reason: "Database name must be at least 2 characters long".to_string(),
+            });
+        }
+
+        // Check for PostgreSQL length limit (63 characters)
+        if name.len() > 63 {
+            return Err(CloneError::InvalidDatabaseName {
+                name: name.to_string(),
+                reason: format!("Database name exceeds PostgreSQL limit of 63 characters (got {})", name.len()),
+            });
+        }
+
+        // Check for spaces and special characters
+        if name.contains(' ') || name.contains('@') {
+            return Err(CloneError::InvalidDatabaseName {
+                name: name.to_string(),
+                reason: "Database name cannot contain spaces or special characters".to_string(),
+            });
+        }
+
+        // Check for uppercase letters (PostgreSQL converts to lowercase, but we should be explicit)
+        if name.chars().any(|c| c.is_uppercase()) {
+            return Err(CloneError::InvalidDatabaseName {
+                name: name.to_string(),
+                reason: "Database name should be lowercase only".to_string(),
+            });
+        }
+
+        // Check for names starting with numbers
+        if name.chars().next().map_or(false, |c| c.is_ascii_digit()) {
+            return Err(CloneError::InvalidDatabaseName {
+                name: name.to_string(),
+                reason: "Database name cannot start with a number".to_string(),
+            });
+        }
+
+        // Check for PostgreSQL reserved words
+        let reserved_words = ["select", "table", "drop", "create", "database", "user", "group"];
+        if reserved_words.contains(&name.to_lowercase().as_str()) {
+            return Err(CloneError::InvalidDatabaseName {
+                name: name.to_string(),
+                reason: "Database name cannot be a PostgreSQL reserved word".to_string(),
+            });
+        }
+
+        Ok(())
+    }
+
     /// Clone a database from a template using `CREATE DATABASE WITH TEMPLATE`
     ///
     /// This method executes `PostgreSQL`'s `CREATE DATABASE WITH TEMPLATE` command
@@ -96,6 +173,10 @@ impl CloneManager {
     /// - `PostgreSQL` permissions are insufficient
     pub async fn clone_database(&self, template_name: &str, clone_name: &str) -> CloneResult<()> {
         let start = Instant::now();
+
+        // Validate both template and clone names for security
+        Self::validate_database_name(template_name)?;
+        Self::validate_database_name(clone_name)?;
 
         // Execute the clone command using PostgreSQL's native template functionality
         let clone_sql = format!("CREATE DATABASE {clone_name} WITH TEMPLATE {template_name}");

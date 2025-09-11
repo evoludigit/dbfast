@@ -37,12 +37,15 @@ async fn test_sql_injection_protection_in_template_name() {
             assert!(matches!(result, Err(CloneError::InvalidDatabaseName { .. })));
         }
         Err(_) => {
-            // No database connection - create clone manager with mock validation
+            // No database connection - test validation logic directly
             println!("⚠️  Testing validation logic without database connection");
             
-            // We should still be able to validate input even without database
-            let validation_result = validate_database_name("template'; DROP DATABASE important_data; --");
-            assert!(validation_result.is_err(), "Should reject SQL injection attempts");
+            // We can still test validation logic directly
+            let validation_result = CloneManager::validate_database_name("template'; DROP DATABASE important_data; --");
+            assert!(
+                matches!(validation_result, Err(CloneError::InvalidDatabaseName { .. })),
+                "Should reject SQL injection attempts"
+            );
         }
     }
 }
@@ -77,8 +80,11 @@ async fn test_sql_injection_protection_in_clone_name() {
         Err(_) => {
             println!("⚠️  Testing validation logic without database connection");
             
-            let validation_result = validate_database_name("clone'; CREATE DATABASE malicious_db; --");
-            assert!(validation_result.is_err(), "Should reject SQL injection attempts");
+            let validation_result = CloneManager::validate_database_name("clone'; CREATE DATABASE malicious_db; --");
+            assert!(
+                matches!(validation_result, Err(CloneError::InvalidDatabaseName { .. })),
+                "Should reject SQL injection attempts"
+            );
         }
     }
 }
@@ -131,9 +137,9 @@ async fn test_invalid_database_name_characters() {
             println!("⚠️  Testing validation logic without database connection");
             
             for invalid_name in invalid_names {
-                let validation_result = validate_database_name(invalid_name);
+                let validation_result = CloneManager::validate_database_name(invalid_name);
                 assert!(
-                    validation_result.is_err(), 
+                    matches!(validation_result, Err(CloneError::InvalidDatabaseName { .. })), 
                     "Should reject invalid database name: '{}'", 
                     invalid_name
                 );
@@ -168,7 +174,7 @@ async fn test_valid_database_names_accepted() {
             // With real database connection, validation should pass
             // but actual cloning may fail (template doesn't exist) - that's OK
             for valid_name in valid_names {
-                let validation_result = validate_database_name(valid_name);
+                let validation_result = CloneManager::validate_database_name(valid_name);
                 assert!(
                     validation_result.is_ok(),
                     "Should accept valid database name: '{}'", 
@@ -180,7 +186,7 @@ async fn test_valid_database_names_accepted() {
             println!("⚠️  Testing validation logic without database connection");
             
             for valid_name in valid_names {
-                let validation_result = validate_database_name(valid_name);
+                let validation_result = CloneManager::validate_database_name(valid_name);
                 assert!(
                     validation_result.is_ok(), 
                     "Should accept valid database name: '{}'", 
@@ -191,13 +197,3 @@ async fn test_valid_database_names_accepted() {
     }
 }
 
-// Helper function that will be implemented in CloneManager
-// This should be exposed for testing or implemented as part of CloneManager
-fn validate_database_name(name: &str) -> Result<(), CloneError> {
-    // This function doesn't exist yet - RED phase
-    // Will be implemented in GREEN phase
-    Err(CloneError::InvalidDatabaseName {
-        name: name.to_string(),
-        reason: "Validation not implemented yet".to_string(),
-    })
-}
