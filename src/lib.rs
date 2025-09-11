@@ -22,6 +22,8 @@
 pub mod backup;
 /// CLI interface for `DBFast`
 pub mod cli;
+/// Database cloning functionality
+pub mod clone;
 /// CLI commands
 pub mod commands;
 /// Configuration management for `DBFast`
@@ -38,6 +40,8 @@ pub mod query;
 pub mod remote;
 /// File scanning and hash calculation
 pub mod scanner;
+/// Template management functionality
+pub mod template;
 
 pub use config::Config;
 pub use connection::Connection;
