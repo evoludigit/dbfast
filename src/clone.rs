@@ -3,10 +3,42 @@
 /// This module provides fast database cloning using `PostgreSQL`'s `CREATE DATABASE WITH TEMPLATE`
 /// functionality. It's designed to achieve database cloning in under 100ms for optimal performance.
 use crate::database::{DatabaseError, DatabasePool};
-use std::time::Instant;
+use std::time::{Duration, Instant};
+use thiserror::Error;
+
+/// Enhanced error types for database cloning operations
+#[derive(Debug, Error)]
+pub enum CloneError {
+    #[error("Invalid database name: {name}. {reason}")]
+    InvalidDatabaseName { name: String, reason: String },
+    
+    #[error("Template database '{template}' does not exist")]
+    TemplateNotFound { template: String },
+    
+    #[error("Clone database '{clone}' already exists")]
+    CloneAlreadyExists { clone: String },
+    
+    #[error("Clone operation timed out after {timeout_ms}ms")]
+    CloneTimeout { timeout_ms: u64 },
+    
+    #[error("Insufficient permissions to create database '{name}'")]
+    InsufficientPermissions { name: String },
+    
+    #[error("Connection pool exhausted during clone operation")]
+    ConnectionPoolExhausted,
+    
+    #[error("Clone verification failed: {reason}")]
+    CloneVerificationFailed { reason: String },
+    
+    #[error("Database error: {source}")]
+    DatabaseError { 
+        #[from] 
+        source: DatabaseError 
+    },
+}
 
 /// Database cloning result type
-pub type CloneResult<T> = Result<T, DatabaseError>;
+pub type CloneResult<T> = Result<T, CloneError>;
 
 /// Manager for database cloning operations
 ///
@@ -69,7 +101,8 @@ impl CloneManager {
         let clone_sql = format!("CREATE DATABASE {clone_name} WITH TEMPLATE {template_name}");
 
         // Execute the clone operation
-        self.pool.query(&clone_sql, &[]).await?;
+        self.pool.query(&clone_sql, &[]).await
+            .map_err(|db_err| CloneError::DatabaseError { source: db_err })?;
 
         // Log performance metrics for monitoring
         let duration = start.elapsed();
@@ -98,7 +131,8 @@ impl CloneManager {
     /// - Database is currently in use by other connections
     pub async fn drop_database(&self, database_name: &str) -> CloneResult<()> {
         let drop_sql = format!("DROP DATABASE IF EXISTS {database_name}");
-        self.pool.query(&drop_sql, &[]).await?;
+        self.pool.query(&drop_sql, &[]).await
+            .map_err(|db_err| CloneError::DatabaseError { source: db_err })?;
 
         println!("Database dropped: {database_name}");
         Ok(())
