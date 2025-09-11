@@ -41,6 +41,18 @@ pub enum Commands {
         #[arg(long)]
         verbose: bool,
     },
+    /// List configured environments
+    Environments {
+        /// Show verbose environment information
+        #[arg(long)]
+        verbose: bool,
+    },
+    /// Validate environment configuration
+    ValidateEnv {
+        /// Environment name to validate
+        #[arg(long, value_name = "NAME")]
+        env: String,
+    },
 }
 
 impl Cli {

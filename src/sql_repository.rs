@@ -112,13 +112,13 @@ impl SqlRepository {
         let mut entries = async_fs::read_dir(&self.repository_path)
             .await
             .map_err(|e| {
-                DatabaseError::Config(format!("Failed to read repository directory: {}", e))
+                DatabaseError::Config(format!("Failed to read repository directory: {e}"))
             })?;
 
         while let Some(entry) = entries
             .next_entry()
             .await
-            .map_err(|e| DatabaseError::Config(format!("Failed to read directory entry: {}", e)))?
+            .map_err(|e| DatabaseError::Config(format!("Failed to read directory entry: {e}")))?
         {
             let path = entry.path();
             if path.is_dir() {
@@ -146,20 +146,20 @@ impl SqlRepository {
         let mut entries = async_fs::read_dir(&self.repository_path)
             .await
             .map_err(|e| {
-                DatabaseError::Config(format!("Failed to read structured repository: {}", e))
+                DatabaseError::Config(format!("Failed to read structured repository: {e}"))
             })?;
 
         // Collect all structured directories
         while let Some(entry) = entries
             .next_entry()
             .await
-            .map_err(|e| DatabaseError::Config(format!("Failed to read directory entry: {}", e)))?
+            .map_err(|e| DatabaseError::Config(format!("Failed to read directory entry: {e}")))?
         {
             let path = entry.path();
             if path.is_dir() {
                 if let Some(name) = path.file_name() {
                     let name_str = name.to_string_lossy();
-                    if self.should_include_structured_directory(&name_str, environments) {
+                    if Self::should_include_structured_directory(&name_str, environments) {
                         directories.push((name_str.to_string(), path));
                     }
                 }
@@ -181,7 +181,7 @@ impl SqlRepository {
     }
 
     /// Check if a structured directory should be included based on environment filtering
-    fn should_include_structured_directory(&self, dir_name: &str, environments: &[&str]) -> bool {
+    fn should_include_structured_directory(dir_name: &str, environments: &[&str]) -> bool {
         // Always include schema and common directories
         if dir_name.contains("_schema") || dir_name.contains("_seed_common") {
             return true;
@@ -189,9 +189,7 @@ impl SqlRepository {
 
         // For environment-specific directories, check if environment is requested
         for env in environments {
-            if dir_name.contains(&format!("_seed_{}", env))
-                || dir_name.contains(&format!("_{}", env))
-            {
+            if dir_name.contains(&format!("_seed_{env}")) || dir_name.contains(&format!("_{env}")) {
                 return true;
             }
         }
@@ -231,7 +229,7 @@ impl SqlRepository {
         while let Some(entry) = entries
             .next_entry()
             .await
-            .map_err(|e| DatabaseError::Config(format!("Failed to read directory entry: {}", e)))?
+            .map_err(|e| DatabaseError::Config(format!("Failed to read directory entry: {e}")))?
         {
             let path = entry.path();
             if path.is_file() {

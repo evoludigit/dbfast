@@ -88,8 +88,9 @@ async fn test_clone_schema_comparison() {
             match result {
                 Ok(comparison_report) => {
                     // Should have comparison capabilities
+                    // Comparison completed successfully, check that report is valid
                     assert!(
-                        comparison_report.has_differences || !comparison_report.has_differences,
+                        comparison_report.tables_compared > 0 || !comparison_report.has_differences,
                         "Comparison should complete successfully"
                     );
                     println!(
