@@ -20,6 +20,8 @@
 
 /// Backup management
 pub mod backup;
+/// Change detection for template rebuilding
+pub mod change_detector;
 /// CLI interface for `DBFast`
 pub mod cli;
 /// Database cloning functionality
