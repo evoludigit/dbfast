@@ -8,6 +8,9 @@ dbfast.toml
 test-data/
 .dbfast_cache.db
 
+# Claude Code phase prompts (local development)
+.claude-phase-*-prompt.md
+
 # IDE
 .vscode/
 .idea/
