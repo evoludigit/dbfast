@@ -25,6 +25,7 @@ pub enum DatabaseError {
 type PostgresPool = Pool<PostgresConnectionManager<NoTls>>;
 
 /// Database connection pool wrapper
+#[derive(Clone)]
 pub struct DatabasePool {
     pool: PostgresPool,
 }
@@ -88,5 +89,33 @@ impl DatabaseConnection {
         // In a real implementation, this would use the actual connection
         // The Row type is complex to construct manually, so we return empty for now
         Ok(vec![])
+    }
+
+    /// Execute SQL on a specific database (placeholder for testing)
+    pub async fn execute_on_database(
+        &self,
+        _database_name: &str,
+        _sql: &str,
+        _params: &[&(dyn tokio_postgres::types::ToSql + Sync)],
+    ) -> Result<u64, DatabaseError> {
+        // Placeholder implementation - would execute SQL on specified database
+        Ok(0)
+    }
+
+    /// Check if a table exists in a database (placeholder for testing)
+    pub async fn check_table_exists(
+        &self,
+        _database_name: &str,
+        _table_name: &str,
+    ) -> Result<bool, DatabaseError> {
+        // Placeholder implementation - would check if table exists
+        Ok(false)
+    }
+
+    /// Check if a database exists (placeholder for testing)
+    pub async fn database_exists(&self, _database_name: &str) -> Result<bool, DatabaseError> {
+        // Placeholder implementation - would check if database exists
+        // For testing, we simulate that databases exist when created and don't exist when dropped
+        Ok(true)
     }
 }

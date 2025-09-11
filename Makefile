@@ -135,3 +135,35 @@ complete-phase: ## Complete current phase (usage: make complete-phase PHASE=2A)
 		exit 1; \
 	fi
 	@./scripts/complete-phase.sh $(PHASE)
+
+# 🎼✨ Vision-to-Code Transformation (Ultimate Maestro)
+vision-to-code: check-maestro ## Transform high-level vision into production code (usage: make vision-to-code VISION="description")
+	@if [ -z "$(VISION)" ]; then \
+		echo "Usage: make vision-to-code VISION=\"A REST API for user management with JWT authentication\""; \
+		echo "Examples:"; \
+		echo "  make vision-to-code VISION=\"Add password reset functionality via email\""; \
+		echo "  make vision-to-code VISION=\"Real-time chat system with WebSocket support\""; \
+		echo "  make vision-to-code VISION=\"GraphQL API with subscription support\""; \
+		exit 1; \
+	fi
+	@echo "🎼✨ Starting vision-to-code transformation..."
+	@echo "💡 Vision: $(VISION)"
+	maestro create --vision "$(VISION)" --target "$(or $(TARGET),production)"
+
+add-feature: check-maestro ## Add new feature to existing codebase (usage: make add-feature FEATURE="description")
+	@if [ -z "$(FEATURE)" ]; then \
+		echo "Usage: make add-feature FEATURE=\"Password reset via email\""; \
+		echo "Examples:"; \
+		echo "  make add-feature FEATURE=\"Add OAuth2 social login support\""; \
+		echo "  make add-feature FEATURE=\"Implement rate limiting middleware\""; \
+		echo "  make add-feature FEATURE=\"Add real-time notifications\""; \
+		exit 1; \
+	fi
+	@echo "🎼+ Adding feature to existing codebase..."
+	@echo "✨ Feature: $(FEATURE)"
+	maestro add-feature --feature "$(FEATURE)"
+
+# Enhanced aliases with vision support
+create-app: vision-to-code ## Alias for vision-to-code
+think-and-build: vision-to-code ## Alias for vision-to-code  
+maestro-create: vision-to-code ## Alias for vision-to-code
