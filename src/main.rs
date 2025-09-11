@@ -1,5 +1,5 @@
 use dbfast::cli::{Cli, Commands};
-use dbfast::commands::{init, seed, status};
+use dbfast::commands::{environments, init, seed, status, validate_env};
 use std::process;
 
 // Allow println in main CLI binary
@@ -25,6 +25,18 @@ fn main() {
         }
         Some(Commands::Status { verbose }) => {
             if let Err(e) = status::handle_status_with_options(verbose) {
+                eprintln!("Error: {}", e);
+                process::exit(1);
+            }
+        }
+        Some(Commands::Environments { verbose }) => {
+            if let Err(e) = environments::handle_environments(verbose) {
+                eprintln!("Error: {}", e);
+                process::exit(1);
+            }
+        }
+        Some(Commands::ValidateEnv { env }) => {
+            if let Err(e) = validate_env::handle_validate_env(&env) {
                 eprintln!("Error: {}", e);
                 process::exit(1);
             }

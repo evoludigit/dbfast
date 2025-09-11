@@ -2,6 +2,9 @@ use crate::clone::CloneManager;
 use crate::config::Config;
 use crate::database::DatabasePool;
 use crate::error::{DbFastError, Result};
+use crate::scanner::FileScanner;
+use crate::template::TemplateManager;
+use std::path::PathBuf;
 use std::time::Instant;
 
 #[allow(clippy::disallowed_methods)]
@@ -16,6 +19,7 @@ pub fn handle_seed(output_name: &str, with_seeds: bool) -> Result<()> {
 }
 
 /// Handle the seed command asynchronously with real database cloning
+#[allow(clippy::too_many_lines)]
 pub async fn handle_seed_async(output_name: &str, with_seeds: bool) -> Result<()> {
     let start = Instant::now();
 
@@ -46,7 +50,65 @@ pub async fn handle_seed_async(output_name: &str, with_seeds: bool) -> Result<()
         }
     })?;
 
-    // Step 2: Create CloneManager and clone database from template
+    // Step 2: Smart template creation with change detection
+    let repo_path = PathBuf::from(&config.repository.path);
+    println!("🔍 Scanning for SQL files and checking template state...");
+
+    let template_manager = TemplateManager::new_with_change_detection(
+        pool.clone(),
+        config.database.clone(),
+        repo_path.clone(),
+    );
+
+    // Scan for SQL files
+    let scanner = FileScanner::new(&repo_path);
+    let scanned_files = scanner
+        .scan()
+        .map_err(|e| DbFastError::ConfigCreationFailed {
+            message: format!("Failed to scan SQL files: {e}"),
+        })?;
+
+    if scanned_files.is_empty() {
+        println!(
+            "⚠️  No SQL files found in repository path: {}",
+            repo_path.display()
+        );
+        return Err(DbFastError::ConfigCreationFailed {
+            message: "No SQL files found. Please check your repository path.".to_string(),
+        });
+    }
+
+    println!("📄 Found {} SQL files", scanned_files.len());
+
+    // Convert scanned files to paths for template creation
+    let sql_file_paths: Vec<PathBuf> = scanned_files.into_iter().map(|f| f.path).collect();
+
+    // Smart template creation - only rebuilds if needed
+    let template_start = Instant::now();
+    let template_was_created = template_manager
+        .smart_create_template(&config.database.template_name, &sql_file_paths)
+        .await
+        .map_err(|e| DbFastError::ConfigCreationFailed {
+            message: format!("Failed to create/update template: {e}"),
+        })?;
+
+    let template_duration = template_start.elapsed();
+
+    if template_was_created {
+        println!(
+            "✅ Template '{}' created/updated in {}ms",
+            config.database.template_name,
+            template_duration.as_millis()
+        );
+    } else {
+        println!(
+            "⏩ Template '{}' is up to date ({}ms check)",
+            config.database.template_name,
+            template_duration.as_millis()
+        );
+    }
+
+    // Step 3: Create CloneManager and clone database from template
     println!("⚡ Cloning database from template...");
     let clone_manager = CloneManager::new(pool);
 
@@ -61,8 +123,13 @@ pub async fn handle_seed_async(output_name: &str, with_seeds: bool) -> Result<()
     let clone_duration = clone_start.elapsed();
     let total_duration = start.elapsed();
 
-    // Step 3: Report success with performance metrics
+    // Step 4: Report success with performance metrics
     println!("✅ Database '{output_name}' created successfully!");
+    if template_was_created {
+        println!("🏗️  Template creation: {}ms", template_duration.as_millis());
+    } else {
+        println!("🔍 Template check: {}ms", template_duration.as_millis());
+    }
     println!("⚡ Clone operation: {}ms", clone_duration.as_millis());
     println!("🎯 Total time: {}ms", total_duration.as_millis());
 
