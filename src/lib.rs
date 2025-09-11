@@ -38,6 +38,8 @@ pub mod query;
 pub mod remote;
 /// File scanning and hash calculation
 pub mod scanner;
+/// SQL file execution functionality
+pub mod sql_executor;
 
 pub use config::Config;
 pub use connection::Connection;
