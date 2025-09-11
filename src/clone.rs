@@ -3,10 +3,11 @@
 /// This module provides fast database cloning using `PostgreSQL`'s `CREATE DATABASE WITH TEMPLATE`
 /// functionality. It's designed to achieve database cloning in under 100ms for optimal performance.
 use crate::database::{DatabaseError, DatabasePool};
-use std::time::{Duration, Instant};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use thiserror::Error;
+use tokio::sync::Semaphore;
 
 /// Enhanced error types for database cloning operations
 #[derive(Debug, Error)]
@@ -71,13 +72,19 @@ pub enum CloneError {
 /// Database cloning result type
 pub type CloneResult<T> = Result<T, CloneError>;
 
-/// Configuration for clone operations
+/// Configuration for clone operations with industrial-grade settings
 #[derive(Debug, Clone)]
 pub struct CloneConfig {
-    /// Maximum timeout for clone operations
+    /// Maximum timeout for clone operations (default: 5 minutes)
     pub clone_timeout: Duration,
-    /// Maximum number of concurrent clone operations
+    /// Maximum number of concurrent clone operations (default: 10)
     pub max_concurrent_clones: usize,
+    /// Timeout for acquiring database connections from pool (default: 30 seconds)
+    pub connection_timeout: Duration,
+    /// Maximum time to wait for operation slot when at concurrency limit (default: 60 seconds)
+    pub queue_timeout: Duration,
+    /// Enable detailed performance logging (default: false)
+    pub enable_performance_logging: bool,
 }
 
 impl Default for CloneConfig {
@@ -85,6 +92,51 @@ impl Default for CloneConfig {
         Self {
             clone_timeout: Duration::from_secs(300), // 5 minutes default
             max_concurrent_clones: 10,
+            connection_timeout: Duration::from_secs(30), // 30 seconds to get connection
+            queue_timeout: Duration::from_secs(60),      // 1 minute to wait for slot
+            enable_performance_logging: false,
+        }
+    }
+}
+
+/// Performance metrics for clone operations
+#[derive(Debug, Default)]
+pub struct CloneMetrics {
+    /// Total number of clone operations attempted
+    pub total_clones: AtomicU64,
+    /// Number of successful clone operations
+    pub successful_clones: AtomicU64,
+    /// Number of failed clone operations
+    pub failed_clones: AtomicU64,
+    /// Number of timed out clone operations
+    pub timed_out_clones: AtomicU64,
+    /// Total duration of all clone operations in milliseconds
+    pub total_duration_ms: AtomicU64,
+    /// Number of operations that were blocked due to concurrency limits
+    pub blocked_operations: AtomicU64,
+}
+
+impl CloneMetrics {
+    /// Get the average clone operation duration in milliseconds
+    #[allow(clippy::cast_precision_loss)] // Acceptable loss for metrics calculation
+    pub fn average_duration_ms(&self) -> f64 {
+        let total = self.total_clones.load(Ordering::Relaxed);
+        if total == 0 {
+            0.0
+        } else {
+            self.total_duration_ms.load(Ordering::Relaxed) as f64 / total as f64
+        }
+    }
+
+    /// Get the success rate as a percentage
+    #[allow(clippy::cast_precision_loss)] // Acceptable loss for metrics calculation
+    pub fn success_rate(&self) -> f64 {
+        let total = self.total_clones.load(Ordering::Relaxed);
+        if total == 0 {
+            0.0
+        } else {
+            let successful = self.successful_clones.load(Ordering::Relaxed);
+            (successful as f64 / total as f64) * 100.0
         }
     }
 }
@@ -100,7 +152,7 @@ impl Default for CloneConfig {
 ///
 /// # Connection Management
 /// - Automatic connection pool exhaustion detection
-/// - Timeout handling for long-running operations  
+/// - Timeout handling for long-running operations
 /// - Resource cleanup on operation failure
 /// - Concurrent operation limits
 ///
@@ -121,7 +173,10 @@ impl Default for CloneConfig {
 pub struct CloneManager {
     pool: DatabasePool,
     config: CloneConfig,
-    active_operations: Arc<AtomicUsize>,
+    /// Semaphore to limit concurrent operations (more robust than atomic counter)
+    operation_semaphore: Arc<Semaphore>,
+    /// Performance and operational metrics
+    metrics: Arc<CloneMetrics>,
 }
 
 impl CloneManager {
@@ -143,9 +198,26 @@ impl CloneManager {
     pub fn new_with_config(pool: DatabasePool, config: CloneConfig) -> Self {
         Self {
             pool,
+            operation_semaphore: Arc::new(Semaphore::new(config.max_concurrent_clones)),
+            metrics: Arc::new(CloneMetrics::default()),
             config,
-            active_operations: Arc::new(AtomicUsize::new(0)),
         }
+    }
+
+    /// Get current performance metrics
+    ///
+    /// Returns a reference to the metrics for monitoring and debugging
+    #[must_use]
+    pub fn metrics(&self) -> &CloneMetrics {
+        &self.metrics
+    }
+
+    /// Get current configuration
+    ///
+    /// Returns a reference to the current configuration
+    #[must_use]
+    pub const fn config(&self) -> &CloneConfig {
+        &self.config
     }
 
     /// Validate database name for security and `PostgreSQL` compatibility
@@ -393,58 +465,99 @@ impl CloneManager {
     /// # Errors
     /// Returns `CloneError` if:
     /// - Template database doesn't exist
-    /// - Clone database name already exists  
+    /// - Clone database name already exists
     /// - Database connection fails or pool is exhausted
     /// - Operation exceeds configured timeout
     /// - `PostgreSQL` permissions are insufficient
     pub async fn clone_database(&self, template_name: &str, clone_name: &str) -> CloneResult<()> {
         let start = Instant::now();
 
+        // Update metrics - attempt started
+        self.metrics.total_clones.fetch_add(1, Ordering::Relaxed);
+
         // Validate both template and clone names for security
         Self::validate_database_name(template_name)?;
         Self::validate_database_name(clone_name)?;
 
-        // Check if we've exceeded concurrent operation limits
-        let active_count = self.active_operations.fetch_add(1, Ordering::SeqCst);
-        if active_count >= self.config.max_concurrent_clones {
-            self.active_operations.fetch_sub(1, Ordering::SeqCst);
-            return Err(CloneError::ConnectionPoolExhausted);
-        }
+        // Acquire semaphore permit with timeout to prevent indefinite waiting
+        let permit_result = tokio::time::timeout(
+            self.config.queue_timeout,
+            self.operation_semaphore.acquire(),
+        )
+        .await;
 
-        // Wrap the operation in a timeout
-        let clone_future = self.execute_clone_operation(template_name, clone_name);
+        let _permit = match permit_result {
+            Ok(Ok(permit)) => permit,
+            Ok(Err(_)) => {
+                // Semaphore was closed (shouldn't happen in normal operation)
+                self.metrics
+                    .blocked_operations
+                    .fetch_add(1, Ordering::Relaxed);
+                self.metrics.failed_clones.fetch_add(1, Ordering::Relaxed);
+                return Err(CloneError::ConnectionPoolExhausted);
+            }
+            Err(_) => {
+                // Timeout waiting for permit
+                self.metrics
+                    .blocked_operations
+                    .fetch_add(1, Ordering::Relaxed);
+                self.metrics.failed_clones.fetch_add(1, Ordering::Relaxed);
+                return Err(CloneError::CloneTimeout {
+                    timeout_ms: self.config.queue_timeout.as_millis() as u64,
+                });
+            }
+        };
+
+        // Execute the clone operation with timeout
+        let clone_future = self.execute_clone_operation(template_name, clone_name, start);
         let timeout_result = tokio::time::timeout(self.config.clone_timeout, clone_future).await;
 
-        // Decrement active operations count regardless of outcome
-        self.active_operations.fetch_sub(1, Ordering::SeqCst);
+        // Process result and update metrics
+        let duration = start.elapsed();
+        self.metrics
+            .total_duration_ms
+            .fetch_add(duration.as_millis() as u64, Ordering::Relaxed);
 
         match timeout_result {
             Ok(clone_result) => {
-                // Log performance metrics for monitoring
-                let duration = start.elapsed();
                 match &clone_result {
                     Ok(()) => {
-                        println!(
-                            "Database cloned: {template_name} -> {clone_name} in {}ms",
-                            duration.as_millis()
-                        );
+                        self.metrics
+                            .successful_clones
+                            .fetch_add(1, Ordering::Relaxed);
+                        if self.config.enable_performance_logging {
+                            println!(
+                                "✅ Database cloned: {template_name} -> {clone_name} in {}ms",
+                                duration.as_millis()
+                            );
+                        }
                     }
-                    Err(_) => {
-                        println!(
-                            "Database clone failed: {template_name} -> {clone_name} after {}ms",
-                            duration.as_millis()
-                        );
+                    Err(err) => {
+                        self.metrics.failed_clones.fetch_add(1, Ordering::Relaxed);
+                        if self.config.enable_performance_logging {
+                            println!(
+                                "❌ Database clone failed: {template_name} -> {clone_name} after {}ms - {err}",
+                                duration.as_millis()
+                            );
+                        }
                     }
                 }
                 clone_result
             }
             Err(_) => {
                 // Timeout occurred
-                let duration = start.elapsed();
-                println!(
-                    "Database clone timed out: {template_name} -> {clone_name} after {}ms",
-                    duration.as_millis()
-                );
+                self.metrics
+                    .timed_out_clones
+                    .fetch_add(1, Ordering::Relaxed);
+                self.metrics.failed_clones.fetch_add(1, Ordering::Relaxed);
+
+                if self.config.enable_performance_logging {
+                    println!(
+                        "⏰ Database clone timed out: {template_name} -> {clone_name} after {}ms",
+                        duration.as_millis()
+                    );
+                }
+
                 Err(CloneError::CloneTimeout {
                     timeout_ms: self.config.clone_timeout.as_millis() as u64,
                 })
@@ -453,63 +566,120 @@ impl CloneManager {
     }
 
     /// Execute the actual clone operation
-    /// 
+    ///
     /// This is separated from the main method to allow for timeout wrapping
-    async fn execute_clone_operation(&self, template_name: &str, clone_name: &str) -> CloneResult<()> {
+    async fn execute_clone_operation(
+        &self,
+        template_name: &str,
+        clone_name: &str,
+        _start: Instant,
+    ) -> CloneResult<()> {
         // Execute the clone command using PostgreSQL's native template functionality
         let clone_sql = format!("CREATE DATABASE {clone_name} WITH TEMPLATE {template_name}");
 
         // Execute the clone operation with proper error mapping
-        self.pool
-            .query(&clone_sql, &[])
-            .await
-            .map_err(|db_err| {
-                // Map specific database errors to more helpful clone errors
-                let error_msg = db_err.to_string().to_lowercase();
-                
-                if error_msg.contains("does not exist") && error_msg.contains(&template_name.to_lowercase()) {
-                    CloneError::TemplateNotFound {
-                        template: template_name.to_string(),
-                    }
-                } else if error_msg.contains("already exists") && error_msg.contains(&clone_name.to_lowercase()) {
-                    CloneError::CloneAlreadyExists {
-                        clone: clone_name.to_string(),
-                    }
-                } else if error_msg.contains("permission") || error_msg.contains("denied") {
-                    CloneError::InsufficientPermissions {
-                        name: clone_name.to_string(),
-                    }
-                } else {
-                    CloneError::DatabaseError { source: db_err }
+        self.pool.query(&clone_sql, &[]).await.map_err(|db_err| {
+            // Map specific database errors to more helpful clone errors
+            let error_msg = db_err.to_string().to_lowercase();
+
+            if error_msg.contains("does not exist")
+                && error_msg.contains(&template_name.to_lowercase())
+            {
+                CloneError::TemplateNotFound {
+                    template: template_name.to_string(),
                 }
-            })?;
+            } else if error_msg.contains("already exists")
+                && error_msg.contains(&clone_name.to_lowercase())
+            {
+                CloneError::CloneAlreadyExists {
+                    clone: clone_name.to_string(),
+                }
+            } else if error_msg.contains("permission") || error_msg.contains("denied") {
+                CloneError::InsufficientPermissions {
+                    name: clone_name.to_string(),
+                }
+            } else {
+                CloneError::DatabaseError { source: db_err }
+            }
+        })?;
 
         Ok(())
     }
 
-    /// Drop a cloned database
+    /// Drop a cloned database with proper connection management
     ///
     /// Removes a database completely. Use with caution.
     ///
     /// # Arguments
     /// * `database_name` - Name of the database to drop
     ///
+    /// # Connection Management
+    /// - Uses semaphore to limit concurrent operations
+    /// - Applies timeout to prevent hanging operations
+    /// - Updates metrics for monitoring
+    ///
     /// # Safety
     /// This operation is irreversible. Ensure the database is no longer needed.
     ///
     /// # Errors
-    /// Returns `DatabaseError` if:
-    /// - Database connection fails
+    /// Returns `CloneError` if:
+    /// - Database connection fails or pool is exhausted
+    /// - Operation exceeds configured timeout
     /// - `PostgreSQL` permissions are insufficient
     /// - Database is currently in use by other connections
     pub async fn drop_database(&self, database_name: &str) -> CloneResult<()> {
-        let drop_sql = format!("DROP DATABASE IF EXISTS {database_name}");
-        self.pool
-            .query(&drop_sql, &[])
-            .await
-            .map_err(|db_err| CloneError::DatabaseError { source: db_err })?;
+        let start = Instant::now();
 
-        println!("Database dropped: {database_name}");
-        Ok(())
+        // Validate database name
+        Self::validate_database_name(database_name)?;
+
+        // Acquire semaphore permit for connection management
+        let _permit = tokio::time::timeout(
+            self.config.queue_timeout,
+            self.operation_semaphore.acquire(),
+        )
+        .await
+        .map_err(|_| CloneError::CloneTimeout {
+            timeout_ms: self.config.queue_timeout.as_millis() as u64,
+        })?
+        .map_err(|_| CloneError::ConnectionPoolExhausted)?;
+
+        // Execute drop operation with timeout
+        let drop_future = async {
+            let drop_sql = format!("DROP DATABASE IF EXISTS {database_name}");
+            self.pool.query(&drop_sql, &[]).await.map_err(|db_err| {
+                let error_msg = db_err.to_string().to_lowercase();
+                if error_msg.contains("permission") || error_msg.contains("denied") {
+                    CloneError::InsufficientPermissions {
+                        name: database_name.to_string(),
+                    }
+                } else {
+                    CloneError::DatabaseError { source: db_err }
+                }
+            })?;
+            Ok(())
+        };
+
+        let result = tokio::time::timeout(self.config.clone_timeout, drop_future)
+            .await
+            .map_err(|_| CloneError::CloneTimeout {
+                timeout_ms: self.config.clone_timeout.as_millis() as u64,
+            })?;
+
+        let duration = start.elapsed();
+        if self.config.enable_performance_logging {
+            match &result {
+                Ok(()) => println!(
+                    "🗑️ Database dropped: {database_name} in {}ms",
+                    duration.as_millis()
+                ),
+                Err(err) => println!(
+                    "❌ Database drop failed: {database_name} after {}ms - {err}",
+                    duration.as_millis()
+                ),
+            }
+        }
+
+        result
     }
 }
