@@ -23,8 +23,8 @@ fn main() {
                 process::exit(1);
             }
         }
-        Some(Commands::Status) => {
-            if let Err(e) = status::handle_status() {
+        Some(Commands::Status { verbose }) => {
+            if let Err(e) = status::handle_status_with_options(verbose) {
                 eprintln!("Error: {}", e);
                 process::exit(1);
             }

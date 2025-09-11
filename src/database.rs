@@ -25,13 +25,22 @@ pub enum DatabaseError {
 type PostgresPool = Pool<PostgresConnectionManager<NoTls>>;
 
 /// Database connection pool wrapper
+#[derive(Clone)]
 pub struct DatabasePool {
     pool: PostgresPool,
 }
 
 impl DatabasePool {
-    /// Create a new database connection pool
+    /// Create a new database connection pool for the default database
     pub async fn new(config: &DatabaseConfig) -> Result<Self, DatabaseError> {
+        Self::new_for_database(config, "postgres").await
+    }
+
+    /// Create a new database connection pool for a specific database
+    pub async fn new_for_database(
+        config: &DatabaseConfig,
+        database_name: &str,
+    ) -> Result<Self, DatabaseError> {
         // Get password from environment variable
         let password = config
             .password_env
@@ -42,8 +51,8 @@ impl DatabasePool {
 
         // Build connection string
         let connection_string = format!(
-            "host={} port={} user={} password={} dbname=postgres",
-            config.host, config.port, config.user, password
+            "host={} port={} user={} password={} dbname={}",
+            config.host, config.port, config.user, password, database_name
         );
 
         // Create connection manager
@@ -67,26 +76,76 @@ impl DatabasePool {
         Ok(rows)
     }
 
-    /// Get a connection for more complex operations (simplified for now)
-    pub async fn get(&self) -> Result<DatabaseConnection, DatabaseError> {
-        let _conn = self.pool.get().await?;
-        Ok(DatabaseConnection {})
+    /// Execute multi-statement SQL content (for SQL files)
+    pub async fn execute_sql_content(&self, sql_content: &str) -> Result<(), DatabaseError> {
+        let conn = self.pool.get().await?;
+
+        let statements = Self::parse_sql_statements(sql_content);
+
+        for statement in statements {
+            if !statement.trim().is_empty() {
+                conn.execute(&statement, &[])
+                    .await
+                    .map_err(DatabaseError::Query)?;
+            }
+        }
+
+        Ok(())
     }
-}
 
-/// Simplified connection wrapper for testing
-pub struct DatabaseConnection {}
+    /// Parse SQL content into individual statements, handling comments and edge cases
+    fn parse_sql_statements(sql_content: &str) -> Vec<String> {
+        let mut statements = Vec::new();
+        let mut current_statement = String::new();
+        let mut in_comment = false;
 
-impl DatabaseConnection {
-    /// Execute a query and return rows (simplified version for testing)
-    pub async fn query(
-        &self,
-        _query: &str,
-        _params: &[&(dyn tokio_postgres::types::ToSql + Sync)],
-    ) -> Result<Vec<Row>, DatabaseError> {
-        // For testing purposes, we'll return an empty result
-        // In a real implementation, this would use the actual connection
-        // The Row type is complex to construct manually, so we return empty for now
-        Ok(vec![])
+        for line in sql_content.lines() {
+            let trimmed = line.trim();
+
+            // Skip empty lines
+            if trimmed.is_empty() {
+                continue;
+            }
+
+            // Skip single-line comments
+            if trimmed.starts_with("--") {
+                continue;
+            }
+
+            // Handle multi-line comments (basic implementation)
+            if trimmed.starts_with("/*") {
+                in_comment = true;
+                continue;
+            }
+            if trimmed.ends_with("*/") {
+                in_comment = false;
+                continue;
+            }
+            if in_comment {
+                continue;
+            }
+
+            // Add line to current statement
+            current_statement.push(' ');
+            current_statement.push_str(line);
+
+            // Check if statement ends with semicolon
+            if trimmed.ends_with(';') {
+                // Remove the semicolon and add to statements
+                current_statement = current_statement.trim_end_matches(';').trim().to_string();
+                if !current_statement.is_empty() {
+                    statements.push(current_statement.clone());
+                }
+                current_statement.clear();
+            }
+        }
+
+        // Add any remaining statement
+        let remaining = current_statement.trim();
+        if !remaining.is_empty() {
+            statements.push(remaining.to_string());
+        }
+
+        statements
     }
 }

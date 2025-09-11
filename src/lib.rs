@@ -18,8 +18,12 @@
     clippy::unused_async
 )]
 
+/// Backup management
+pub mod backup;
 /// CLI interface for `DBFast`
 pub mod cli;
+/// Database cloning functionality
+pub mod clone;
 /// CLI commands
 pub mod commands;
 /// Configuration management for `DBFast`
@@ -32,8 +36,14 @@ pub mod environment;
 /// Error handling
 pub mod error;
 pub mod query;
+/// Remote deployment management
+pub mod remote;
 /// File scanning and hash calculation
 pub mod scanner;
+/// SQL repository management for file discovery and loading
+pub mod sql_repository;
+/// Template management functionality
+pub mod template;
 
 pub use config::Config;
 pub use connection::Connection;
