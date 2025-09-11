@@ -38,12 +38,15 @@ pub mod query;
 pub mod remote;
 /// File scanning and hash calculation
 pub mod scanner;
+/// Template management for database templates
+pub mod template;
 
 pub use config::Config;
 pub use connection::Connection;
 pub use database::DatabasePool;
 pub use query::QueryBuilder;
 pub use scanner::FileScanner;
+pub use template::{TemplateManager, TemplateMetadata, template_exists};
 
 /// Library version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
