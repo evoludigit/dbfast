@@ -3,6 +3,27 @@ use crate::error::{DbFastError, Result};
 use crate::scanner::FileScanner;
 use std::path::{Path, PathBuf};
 
+/// Filter files based on environment include/exclude patterns
+fn file_matches_environment(file_path_str: &str, environment: &crate::config::Environment) -> bool {
+    // Check if file is in any include directory
+    let included = environment
+        .include_directories
+        .iter()
+        .any(|include_dir| file_path_str.contains(include_dir));
+
+    if !included {
+        return false;
+    }
+
+    // Check if file is excluded
+    let excluded = environment
+        .exclude_directories
+        .iter()
+        .any(|exclude_dir| file_path_str.contains(exclude_dir));
+
+    !excluded
+}
+
 #[allow(clippy::disallowed_methods)]
 /// Handle the status command using current working directory
 pub fn handle_status() -> Result<()> {
@@ -73,44 +94,29 @@ pub fn handle_status_in_dir(dir: &Path) -> Result<()> {
     // Show environment configurations
     if !config.environments.is_empty() {
         println!("\n🌍 Environments:");
-        
+
         // Get repository path for file scanning
         let repo_path = Path::new(&config.repository.path);
         let scanner = FileScanner::new(repo_path);
-        
+
         // Try to scan files for counts
         if let Ok(all_files) = scanner.scan() {
             for (name, env) in &config.environments {
                 // Count files for this environment
-                let filtered_files: Vec<_> = all_files
+                let file_count = all_files
                     .iter()
                     .filter(|file| {
                         let file_path_str = file.path.to_string_lossy();
-                        
-                        // Check if file is in any include directory
-                        let included = env.include_directories.iter().any(|include_dir| {
-                            file_path_str.contains(include_dir)
-                        });
-                        
-                        if !included {
-                            return false;
-                        }
-                        
-                        // Check if file is excluded
-                        let excluded = env.exclude_directories.iter().any(|exclude_dir| {
-                            file_path_str.contains(exclude_dir)
-                        });
-                        
-                        !excluded
+                        file_matches_environment(&file_path_str, env)
                     })
-                    .collect();
-                
-                println!("   {} ({} files)", name, filtered_files.len());
+                    .count();
+
+                println!("   {name} ({file_count} files)");
             }
         } else {
             // Fallback to basic display if scanning fails
             for (name, env) in &config.environments {
-                println!("   {} - includes: {:?}", name, env.include_directories);
+                println!("   {name} - includes: {:?}", env.include_directories);
                 if !env.exclude_directories.is_empty() {
                     println!("     excludes: {:?}", env.exclude_directories);
                 }
@@ -221,52 +227,34 @@ fn display_environments_section(config: &Config) {
     }
 
     println!("Environments:");
-    
+
     // Get repository path for file scanning
     let repo_path = PathBuf::from(&config.repository.path);
     let scanner = FileScanner::new(&repo_path);
-    
+
     // Scan all files once for efficiency
-    let all_files = match scanner.scan() {
-        Ok(files) => files,
-        Err(_) => {
-            // If scanning fails, just show basic info
-            for (name, env) in &config.environments {
-                println!("  • {} (includes: {:?})", name, env.include_directories);
-                if !env.exclude_directories.is_empty() {
-                    println!("    excludes: {:?}", env.exclude_directories);
-                }
+    let Ok(all_files) = scanner.scan() else {
+        // If scanning fails, just show basic info
+        for (name, env) in &config.environments {
+            println!("  • {name} (includes: {:?})", env.include_directories);
+            if !env.exclude_directories.is_empty() {
+                println!("    excludes: {:?}", env.exclude_directories);
             }
-            return;
         }
+        return;
     };
 
     for (name, env) in &config.environments {
         // Count files that would be included in this environment
-        let filtered_files: Vec<_> = all_files
+        let file_count = all_files
             .iter()
             .filter(|file| {
                 let file_path_str = file.path.to_string_lossy();
-                
-                // Check if file is in any include directory
-                let included = env.include_directories.iter().any(|include_dir| {
-                    file_path_str.contains(include_dir)
-                });
-                
-                if !included {
-                    return false;
-                }
-                
-                // Check if file is excluded
-                let excluded = env.exclude_directories.iter().any(|exclude_dir| {
-                    file_path_str.contains(exclude_dir)
-                });
-                
-                !excluded
+                file_matches_environment(&file_path_str, env)
             })
-            .collect();
+            .count();
 
-        println!("  • {} ({} files)", name, filtered_files.len());
+        println!("  • {name} ({file_count} files)");
         if !env.exclude_directories.is_empty() {
             println!("    excludes: {:?}", env.exclude_directories);
         }

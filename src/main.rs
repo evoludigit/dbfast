@@ -1,5 +1,5 @@
 use dbfast::cli::{Cli, Commands};
-use dbfast::commands::{init, seed, status, environments, validate_env};
+use dbfast::commands::{environments, init, seed, status, validate_env};
 use std::process;
 
 // Allow println in main CLI binary
