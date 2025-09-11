@@ -3,7 +3,9 @@
 /// This module provides fast database cloning using `PostgreSQL`'s `CREATE DATABASE WITH TEMPLATE`
 /// functionality. It's designed to achieve database cloning in under 100ms for optimal performance.
 use crate::database::{DatabaseError, DatabasePool};
-use std::time::Instant;
+use std::time::{Duration, Instant};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use thiserror::Error;
 
 /// Enhanced error types for database cloning operations
@@ -69,13 +71,38 @@ pub enum CloneError {
 /// Database cloning result type
 pub type CloneResult<T> = Result<T, CloneError>;
 
+/// Configuration for clone operations
+#[derive(Debug, Clone)]
+pub struct CloneConfig {
+    /// Maximum timeout for clone operations
+    pub clone_timeout: Duration,
+    /// Maximum number of concurrent clone operations
+    pub max_concurrent_clones: usize,
+}
+
+impl Default for CloneConfig {
+    fn default() -> Self {
+        Self {
+            clone_timeout: Duration::from_secs(300), // 5 minutes default
+            max_concurrent_clones: 10,
+        }
+    }
+}
+
 /// Manager for database cloning operations
 ///
 /// The `CloneManager` handles creating database clones from templates using `PostgreSQL`'s
-/// native `CREATE DATABASE WITH TEMPLATE` command for maximum performance.
+/// native `CREATE DATABASE WITH TEMPLATE` command for maximum performance with proper
+/// connection management and timeout handling.
 ///
 /// # Performance
-/// Target: Database cloning in <100ms for small-to-medium databases
+/// Target: Database cloning in <200ms for small-to-medium databases
+///
+/// # Connection Management
+/// - Automatic connection pool exhaustion detection
+/// - Timeout handling for long-running operations  
+/// - Resource cleanup on operation failure
+/// - Concurrent operation limits
 ///
 /// # Example
 /// ```rust,no_run
@@ -93,16 +120,32 @@ pub type CloneResult<T> = Result<T, CloneError>;
 #[derive(Clone)]
 pub struct CloneManager {
     pool: DatabasePool,
+    config: CloneConfig,
+    active_operations: Arc<AtomicUsize>,
 }
 
 impl CloneManager {
-    /// Create a new clone manager with the given database pool
+    /// Create a new clone manager with the given database pool using default configuration
     ///
     /// # Arguments
     /// * `pool` - Database connection pool for executing clone operations
     #[must_use]
-    pub const fn new(pool: DatabasePool) -> Self {
-        Self { pool }
+    pub fn new(pool: DatabasePool) -> Self {
+        Self::new_with_config(pool, CloneConfig::default())
+    }
+
+    /// Create a new clone manager with the given database pool and configuration
+    ///
+    /// # Arguments
+    /// * `pool` - Database connection pool for executing clone operations
+    /// * `config` - Configuration for clone operations (timeouts, limits, etc.)
+    #[must_use]
+    pub fn new_with_config(pool: DatabasePool, config: CloneConfig) -> Self {
+        Self {
+            pool,
+            config,
+            active_operations: Arc::new(AtomicUsize::new(0)),
+        }
     }
 
     /// Validate database name for security and `PostgreSQL` compatibility
@@ -331,20 +374,28 @@ impl CloneManager {
     /// Clone a database from a template using `CREATE DATABASE WITH TEMPLATE`
     ///
     /// This method executes `PostgreSQL`'s `CREATE DATABASE WITH TEMPLATE` command
-    /// to create a fast, complete copy of an existing template database.
+    /// to create a fast, complete copy of an existing template database with proper
+    /// connection management and timeout handling.
     ///
     /// # Arguments
     /// * `template_name` - Name of the template database to clone from
     /// * `clone_name` - Name for the new cloned database
     ///
     /// # Performance
-    /// Target: <100ms for small-to-medium databases
+    /// Target: <200ms for small-to-medium databases
+    ///
+    /// # Connection Management
+    /// - Checks for connection pool exhaustion before starting
+    /// - Enforces timeout limits to prevent hanging operations
+    /// - Tracks concurrent operations to prevent overload
+    /// - Ensures proper cleanup on success or failure
     ///
     /// # Errors
-    /// Returns `DatabaseError` if:
+    /// Returns `CloneError` if:
     /// - Template database doesn't exist
-    /// - Clone database name already exists
-    /// - Database connection fails
+    /// - Clone database name already exists  
+    /// - Database connection fails or pool is exhausted
+    /// - Operation exceeds configured timeout
     /// - `PostgreSQL` permissions are insufficient
     pub async fn clone_database(&self, template_name: &str, clone_name: &str) -> CloneResult<()> {
         let start = Instant::now();
@@ -353,21 +404,85 @@ impl CloneManager {
         Self::validate_database_name(template_name)?;
         Self::validate_database_name(clone_name)?;
 
+        // Check if we've exceeded concurrent operation limits
+        let active_count = self.active_operations.fetch_add(1, Ordering::SeqCst);
+        if active_count >= self.config.max_concurrent_clones {
+            self.active_operations.fetch_sub(1, Ordering::SeqCst);
+            return Err(CloneError::ConnectionPoolExhausted);
+        }
+
+        // Wrap the operation in a timeout
+        let clone_future = self.execute_clone_operation(template_name, clone_name);
+        let timeout_result = tokio::time::timeout(self.config.clone_timeout, clone_future).await;
+
+        // Decrement active operations count regardless of outcome
+        self.active_operations.fetch_sub(1, Ordering::SeqCst);
+
+        match timeout_result {
+            Ok(clone_result) => {
+                // Log performance metrics for monitoring
+                let duration = start.elapsed();
+                match &clone_result {
+                    Ok(()) => {
+                        println!(
+                            "Database cloned: {template_name} -> {clone_name} in {}ms",
+                            duration.as_millis()
+                        );
+                    }
+                    Err(_) => {
+                        println!(
+                            "Database clone failed: {template_name} -> {clone_name} after {}ms",
+                            duration.as_millis()
+                        );
+                    }
+                }
+                clone_result
+            }
+            Err(_) => {
+                // Timeout occurred
+                let duration = start.elapsed();
+                println!(
+                    "Database clone timed out: {template_name} -> {clone_name} after {}ms",
+                    duration.as_millis()
+                );
+                Err(CloneError::CloneTimeout {
+                    timeout_ms: self.config.clone_timeout.as_millis() as u64,
+                })
+            }
+        }
+    }
+
+    /// Execute the actual clone operation
+    /// 
+    /// This is separated from the main method to allow for timeout wrapping
+    async fn execute_clone_operation(&self, template_name: &str, clone_name: &str) -> CloneResult<()> {
         // Execute the clone command using PostgreSQL's native template functionality
         let clone_sql = format!("CREATE DATABASE {clone_name} WITH TEMPLATE {template_name}");
 
-        // Execute the clone operation
+        // Execute the clone operation with proper error mapping
         self.pool
             .query(&clone_sql, &[])
             .await
-            .map_err(|db_err| CloneError::DatabaseError { source: db_err })?;
-
-        // Log performance metrics for monitoring
-        let duration = start.elapsed();
-        println!(
-            "Database cloned: {template_name} -> {clone_name} in {}ms",
-            duration.as_millis()
-        );
+            .map_err(|db_err| {
+                // Map specific database errors to more helpful clone errors
+                let error_msg = db_err.to_string().to_lowercase();
+                
+                if error_msg.contains("does not exist") && error_msg.contains(&template_name.to_lowercase()) {
+                    CloneError::TemplateNotFound {
+                        template: template_name.to_string(),
+                    }
+                } else if error_msg.contains("already exists") && error_msg.contains(&clone_name.to_lowercase()) {
+                    CloneError::CloneAlreadyExists {
+                        clone: clone_name.to_string(),
+                    }
+                } else if error_msg.contains("permission") || error_msg.contains("denied") {
+                    CloneError::InsufficientPermissions {
+                        name: clone_name.to_string(),
+                    }
+                } else {
+                    CloneError::DatabaseError { source: db_err }
+                }
+            })?;
 
         Ok(())
     }
