@@ -40,6 +40,8 @@ pub mod query;
 pub mod remote;
 /// File scanning and hash calculation
 pub mod scanner;
+/// Template management functionality
+pub mod template;
 
 pub use config::Config;
 pub use connection::Connection;
