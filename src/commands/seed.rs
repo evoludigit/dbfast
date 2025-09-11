@@ -11,14 +11,14 @@ pub fn handle_seed(output_name: &str, with_seeds: bool) -> Result<()> {
     let rt = tokio::runtime::Runtime::new().map_err(|e| DbFastError::ConfigCreationFailed {
         message: format!("Failed to create async runtime: {e}"),
     })?;
-    
+
     rt.block_on(handle_seed_async(output_name, with_seeds))
 }
 
 /// Handle the seed command asynchronously with real database cloning
 pub async fn handle_seed_async(output_name: &str, with_seeds: bool) -> Result<()> {
     let start = Instant::now();
-    
+
     // Try to load config from current directory
     let config_path = std::env::current_dir()?.join("dbfast.toml");
     if !config_path.exists() {
@@ -49,7 +49,7 @@ pub async fn handle_seed_async(output_name: &str, with_seeds: bool) -> Result<()
     // Step 2: Create CloneManager and clone database from template
     println!("⚡ Cloning database from template...");
     let clone_manager = CloneManager::new(pool);
-    
+
     let clone_start = Instant::now();
     clone_manager
         .clone_database(&config.database.template_name, output_name)
@@ -57,22 +57,28 @@ pub async fn handle_seed_async(output_name: &str, with_seeds: bool) -> Result<()
         .map_err(|e| DbFastError::ConfigCreationFailed {
             message: format!("Failed to clone database: {e}"),
         })?;
-    
+
     let clone_duration = clone_start.elapsed();
     let total_duration = start.elapsed();
 
     // Step 3: Report success with performance metrics
-    println!("✅ Database '{}' created successfully!", output_name);
+    println!("✅ Database '{output_name}' created successfully!");
     println!("⚡ Clone operation: {}ms", clone_duration.as_millis());
     println!("🎯 Total time: {}ms", total_duration.as_millis());
-    
+
     // Verify performance target
     if clone_duration.as_millis() < 100 {
         println!("🏆 Performance target achieved: <100ms cloning!");
     } else if clone_duration.as_millis() < 500 {
-        println!("⚠️  Performance warning: {}ms (target: <100ms)", clone_duration.as_millis());
+        println!(
+            "⚠️  Performance warning: {}ms (target: <100ms)",
+            clone_duration.as_millis()
+        );
     } else {
-        println!("🚨 Performance issue: {}ms (target: <100ms)", clone_duration.as_millis());
+        println!(
+            "🚨 Performance issue: {}ms (target: <100ms)",
+            clone_duration.as_millis()
+        );
     }
 
     Ok(())
