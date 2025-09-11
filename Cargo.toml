@@ -25,7 +25,7 @@ toml = "0.8"
 walkdir = "2.4"
 globset = "0.4"
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
-thiserror = "1.0"
+thiserror = "2.0"
 anyhow = "1.0"
 tracing = "0.1"
 futures = "0.3"
