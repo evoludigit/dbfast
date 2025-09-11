@@ -46,7 +46,7 @@ pub use connection::Connection;
 pub use database::DatabasePool;
 pub use query::QueryBuilder;
 pub use scanner::FileScanner;
-pub use template::{TemplateManager, TemplateMetadata, template_exists};
+pub use template::{template_exists, TemplateManager, TemplateMetadata};
 
 /// Library version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
