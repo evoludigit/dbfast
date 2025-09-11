@@ -165,11 +165,11 @@ async fn test_seed_command_creates_database_with_real_sql() {
     // Test database name
     let test_db_name = format!("dbfast_real_seed_test_{}", std::process::id());
     
-    // Call the actual seed command
-    let result = seed::handle_seed(&test_db_name, false);
+    // Call the async version of seed command to avoid runtime conflicts
+    let result = seed::handle_seed_async(&test_db_name, false).await;
     
     // This should now work with real SQL execution, not just print a message
-    assert!(result.is_ok(), "Seed command should successfully create database with SQL files");
+    assert!(result.is_ok(), "Seed command should successfully create database with SQL files: {:?}", result.err());
     
     // Verify the database was actually created
     let db_exists_result = pool.query(
