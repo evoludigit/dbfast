@@ -40,6 +40,8 @@ pub mod query;
 pub mod remote;
 /// File scanning and hash calculation
 pub mod scanner;
+/// SQL repository management for file discovery and loading
+pub mod sql_repository;
 /// Template management functionality
 pub mod template;
 

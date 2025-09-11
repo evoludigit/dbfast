@@ -1,8 +1,7 @@
-/// Template management functionality for `DBFast`
+use crate::config::DatabaseConfig;
+/// Template management functionality for DBFast
 ///
-/// This module provides template creation and management capabilities that integrate
-/// with the database cloning functionality. Templates are created from SQL files
-/// and can be used as the basis for fast database cloning.
+/// Templates are created from SQL files and can be used for fast database cloning.
 use crate::database::{DatabaseError, DatabasePool};
 use std::path::Path;
 use std::time::Instant;
@@ -11,40 +10,21 @@ use std::time::Instant;
 pub type TemplateResult<T> = Result<T, DatabaseError>;
 
 /// Manager for database template operations
-///
-/// The `TemplateManager` handles creating database templates from SQL files,
-/// which can then be used with `CloneManager` for fast database cloning.
-///
-/// # Integration with `CloneManager`
-/// Templates created by `TemplateManager` are designed to work seamlessly with
-/// `CloneManager` for the complete template → clone workflow.
-///
-/// # Example
-/// ```rust,no_run
-/// use dbfast::{Config, DatabasePool, template::TemplateManager};
-///
-/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-/// let config = Config::from_file("dbfast.toml")?;
-/// let pool = DatabasePool::new(&config.database).await?;
-/// let template_manager = TemplateManager::new(pool);
-///
-/// template_manager.create_template("my_template", &["schema.sql"]).await?;
-/// # Ok(())
-/// # }
-/// ```
 #[derive(Clone)]
 pub struct TemplateManager {
     pool: DatabasePool,
+    db_config: DatabaseConfig,
 }
 
 impl TemplateManager {
-    /// Create a new template manager with the given database pool
+    /// Create a new template manager with the given database pool and config
     ///
     /// # Arguments
     /// * `pool` - Database connection pool for executing template operations
+    /// * `db_config` - Database configuration for creating template-specific connections
     #[must_use]
-    pub const fn new(pool: DatabasePool) -> Self {
-        Self { pool }
+    pub const fn new(pool: DatabasePool, db_config: DatabaseConfig) -> Self {
+        Self { pool, db_config }
     }
 
     /// Create a database template from SQL files
@@ -76,25 +56,50 @@ impl TemplateManager {
 
         // Step 1: Create the template database
         let create_db_sql = format!("CREATE DATABASE {template_name}");
-        self.pool.query(&create_db_sql, &[]).await?;
+        self.pool.query(&create_db_sql, &[]).await.map_err(|e| {
+            DatabaseError::Config(format!(
+                "Failed to create template database '{}': {}",
+                template_name, e
+            ))
+        })?;
 
         println!("📝 Created template database: {template_name}");
 
         // Step 2: Execute SQL files in order
+        // Create connection pool for the template database
+        let template_pool = DatabasePool::new_for_database(&self.db_config, template_name)
+            .await
+            .map_err(|e| {
+                DatabaseError::Config(format!(
+                    "Failed to connect to template database '{}': {}",
+                    template_name, e
+                ))
+            })?;
+
         for (i, sql_file) in sql_files.iter().enumerate() {
             let file_path = sql_file.as_ref();
             println!("📄 Executing SQL file {}: {}", i + 1, file_path.display());
 
-            // In a real implementation, this would:
             // 1. Read the SQL file content
-            // 2. Connect to the specific template database
-            // 3. Execute the SQL commands
-            // For now, we'll simulate this process
-            let _sql_content = std::fs::read_to_string(file_path)
-                .unwrap_or_else(|_| format!("-- Placeholder SQL for {}", file_path.display()));
+            let sql_content = tokio::fs::read_to_string(file_path).await.map_err(|e| {
+                DatabaseError::Config(format!(
+                    "Failed to read SQL file {}: {}",
+                    file_path.display(),
+                    e
+                ))
+            })?;
 
-            // Simulate SQL execution time
-            tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+            // 2. Execute the SQL commands on the template database
+            template_pool
+                .execute_sql_content(&sql_content)
+                .await
+                .map_err(|e| {
+                    DatabaseError::Config(format!(
+                        "Failed to execute SQL file {}: {}",
+                        file_path.display(),
+                        e
+                    ))
+                })?;
         }
 
         let duration = start.elapsed();
@@ -115,9 +120,18 @@ impl TemplateManager {
     /// # Returns
     /// `true` if the template database exists, `false` otherwise
     pub async fn template_exists(&self, template_name: &str) -> TemplateResult<bool> {
-        let check_sql = format!("SELECT 1 FROM pg_database WHERE datname = '{template_name}'");
+        let check_sql = "SELECT 1 FROM pg_database WHERE datname = $1";
 
-        let rows = self.pool.query(&check_sql, &[]).await?;
+        let rows = self
+            .pool
+            .query(&check_sql, &[&template_name])
+            .await
+            .map_err(|e| {
+                DatabaseError::Config(format!(
+                    "Failed to check if template '{}' exists: {}",
+                    template_name, e
+                ))
+            })?;
         Ok(!rows.is_empty())
     }
 
@@ -138,7 +152,12 @@ impl TemplateManager {
     /// - Template is currently in use by other connections
     pub async fn drop_template(&self, template_name: &str) -> TemplateResult<()> {
         let drop_sql = format!("DROP DATABASE IF EXISTS {template_name}");
-        self.pool.query(&drop_sql, &[]).await?;
+        self.pool.query(&drop_sql, &[]).await.map_err(|e| {
+            DatabaseError::Config(format!(
+                "Failed to drop template database '{}': {}",
+                template_name, e
+            ))
+        })?;
 
         println!("🗑️  Template dropped: {template_name}");
         Ok(())
@@ -153,14 +172,16 @@ impl TemplateManager {
     /// Vector of template names
     pub async fn list_templates(&self) -> TemplateResult<Vec<String>> {
         let list_sql = "SELECT datname FROM pg_database WHERE datname LIKE '%template%' OR datname LIKE '%_tmpl'";
-        let _rows = self.pool.query(list_sql, &[]).await?;
+        let rows = self.pool.query(list_sql, &[]).await.map_err(|e| {
+            DatabaseError::Config(format!("Failed to list template databases: {}", e))
+        })?;
 
-        // In a real implementation, we would extract datname from each row
-        // For now, return a placeholder list
-        Ok(vec![
-            "default_template".to_string(),
-            "blog_template".to_string(),
-            "ecommerce_template".to_string(),
-        ])
+        let mut templates = Vec::new();
+        for row in rows {
+            let datname: String = row.get(0);
+            templates.push(datname);
+        }
+
+        Ok(templates)
     }
 }
