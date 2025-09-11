@@ -29,6 +29,7 @@ pub struct TemplateMetadata {
 }
 
 /// Change detector for identifying when SQL files have changed and templates need rebuilding
+#[derive(Clone)]
 pub struct ChangeDetector {
     /// Root path to scan for SQL files
     root_path: PathBuf,

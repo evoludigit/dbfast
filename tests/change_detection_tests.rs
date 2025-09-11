@@ -1,8 +1,5 @@
-use dbfast::change_detector::{ChangeDetector, ChangeDetectionError};
-use dbfast::scanner::{FileScanner, ScannedFile};
-use dbfast::template::TemplateManager;
-use dbfast::database::DatabasePool;
-use dbfast::config::DatabaseConfig;
+use dbfast::change_detector::ChangeDetector;
+use dbfast::scanner::FileScanner;
 use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;
@@ -57,7 +54,7 @@ async fn test_change_detection_with_no_template_metadata() {
 #[tokio::test]
 async fn test_change_detection_with_matching_metadata() {
     let temp_dir = TempDir::new().unwrap();
-    let sql_files = create_test_sql_files(temp_dir.path()).unwrap();
+    let _sql_files = create_test_sql_files(temp_dir.path()).unwrap();
     
     let change_detector = ChangeDetector::new(temp_dir.path().to_path_buf());
     
