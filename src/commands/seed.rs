@@ -6,10 +6,12 @@ use crate::sql_executor::SqlExecutor;
 #[allow(clippy::disallowed_methods)]
 /// Handle the seed command
 pub fn handle_seed(output_name: &str, with_seeds: bool) -> Result<()> {
-    tokio::runtime::Runtime::new().unwrap().block_on(handle_seed_async(output_name, with_seeds))
+    tokio::runtime::Runtime::new()
+        .unwrap()
+        .block_on(handle_seed_async(output_name, with_seeds))
 }
 
-/// Async version of handle_seed for testing and internal use
+/// Async version of `handle_seed` for testing and internal use
 pub async fn handle_seed_async(output_name: &str, with_seeds: bool) -> Result<()> {
     // Try to load config from current directory
     let config_path = std::env::current_dir()?.join("dbfast.toml");
@@ -32,25 +34,27 @@ pub async fn handle_seed_async(output_name: &str, with_seeds: bool) -> Result<()
     // Connect to PostgreSQL
     let pool = DatabasePool::new(&config.database).await.map_err(|e| {
         DbFastError::ConfigCreationFailed {
-            message: format!("Failed to connect to database: {}", e),
+            message: format!("Failed to connect to database: {e}"),
         }
     })?;
 
     // Create the output database
-    let create_db_sql = format!("CREATE DATABASE {}", output_name);
-    pool.execute(&create_db_sql, &[]).await.map_err(|e| {
-        DbFastError::ConfigCreationFailed {
-            message: format!("Failed to create database '{}': {}", output_name, e),
-        }
-    })?;
+    let create_db_sql = format!("CREATE DATABASE {output_name}");
+    pool.execute(&create_db_sql, &[])
+        .await
+        .map_err(|e| DbFastError::ConfigCreationFailed {
+            message: format!("Failed to create database '{output_name}': {e}"),
+        })?;
 
-    println!("✅ Database '{}' created", output_name);
+    println!("✅ Database '{output_name}' created");
 
     // Read and execute SQL files from the repository
     let sql_executor = SqlExecutor::new();
     let statements = SqlExecutor::read_sql_files(&config.repository.path)?;
 
-    if !statements.is_empty() {
+    if statements.is_empty() {
+        println!("No SQL files found in repository");
+    } else {
         println!("Executing {} SQL statements...", statements.len());
 
         // Note: In a full implementation, we'd connect to the newly created database
@@ -60,11 +64,9 @@ pub async fn handle_seed_async(output_name: &str, with_seeds: bool) -> Result<()
         sql_executor.execute_statements(&pool, &statements).await?;
 
         println!("✅ SQL execution completed");
-    } else {
-        println!("No SQL files found in repository");
     }
 
-    println!("✅ Database '{}' created successfully", output_name);
+    println!("✅ Database '{output_name}' created successfully");
 
     Ok(())
 }
