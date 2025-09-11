@@ -41,11 +41,11 @@ fn test_seed_command_output() {
 
     // Either success or expected error about missing configuration
     assert!(
-        output.status.success() 
-        || stderr.contains("config") 
-        || stderr.contains("database")
-        || stderr.contains("current directory")
-        || stderr.contains("No such file"),
+        output.status.success()
+            || stderr.contains("config")
+            || stderr.contains("database")
+            || stderr.contains("current directory")
+            || stderr.contains("No such file"),
         "Expected success or config/database/directory error. stdout: {}, stderr: {}",
         stdout,
         stderr
@@ -74,11 +74,11 @@ fn test_seed_command_with_seeds_flag() {
 
     // Should handle the --with-seeds flag properly
     assert!(
-        output.status.success() 
-        || stderr.contains("config") 
-        || stderr.contains("database")
-        || stderr.contains("current directory")
-        || stderr.contains("No such file"),
+        output.status.success()
+            || stderr.contains("config")
+            || stderr.contains("database")
+            || stderr.contains("current directory")
+            || stderr.contains("No such file"),
         "Expected success or config/database/directory error. stdout: {}, stderr: {}",
         stdout,
         stderr
