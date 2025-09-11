@@ -1,6 +1,6 @@
 use crate::change_detector::ChangeDetector;
 use crate::config::DatabaseConfig;
-/// Template management functionality for DBFast
+/// Template management functionality for `DBFast`
 ///
 /// Templates are created from SQL files and can be used for fast database cloning.
 use crate::database::{DatabaseError, DatabasePool};
@@ -27,8 +27,8 @@ impl TemplateManager {
     /// * `db_config` - Database configuration for creating template-specific connections
     #[must_use]
     pub const fn new(pool: DatabasePool, db_config: DatabaseConfig) -> Self {
-        Self { 
-            pool, 
+        Self {
+            pool,
             db_config,
             change_detector: None,
         }
@@ -42,12 +42,12 @@ impl TemplateManager {
     /// * `root_path` - Root path to monitor for SQL file changes
     #[must_use]
     pub fn new_with_change_detection(
-        pool: DatabasePool, 
+        pool: DatabasePool,
         db_config: DatabaseConfig,
         root_path: PathBuf,
     ) -> Self {
-        Self { 
-            pool, 
+        Self {
+            pool,
             db_config,
             change_detector: Some(ChangeDetector::new(root_path)),
         }
@@ -90,8 +90,7 @@ impl TemplateManager {
         let create_db_sql = format!("CREATE DATABASE {template_name}");
         self.pool.query(&create_db_sql, &[]).await.map_err(|e| {
             DatabaseError::Config(format!(
-                "Failed to create template database '{}': {}",
-                template_name, e
+                "Failed to create template database '{template_name}': {e}"
             ))
         })?;
 
@@ -103,8 +102,7 @@ impl TemplateManager {
             .await
             .map_err(|e| {
                 DatabaseError::Config(format!(
-                    "Failed to connect to template database '{}': {}",
-                    template_name, e
+                    "Failed to connect to template database '{template_name}': {e}"
                 ))
             })?;
 
@@ -115,9 +113,8 @@ impl TemplateManager {
             // 1. Read the SQL file content
             let sql_content = tokio::fs::read_to_string(file_path).await.map_err(|e| {
                 DatabaseError::Config(format!(
-                    "Failed to read SQL file {}: {}",
-                    file_path.display(),
-                    e
+                    "Failed to read SQL file {}: {e}",
+                    file_path.display()
                 ))
             })?;
 
@@ -127,9 +124,8 @@ impl TemplateManager {
                 .await
                 .map_err(|e| {
                     DatabaseError::Config(format!(
-                        "Failed to execute SQL file {}: {}",
-                        file_path.display(),
-                        e
+                        "Failed to execute SQL file {}: {e}",
+                        file_path.display()
                     ))
                 })?;
         }
@@ -156,12 +152,11 @@ impl TemplateManager {
 
         let rows = self
             .pool
-            .query(&check_sql, &[&template_name])
+            .query(check_sql, &[&template_name])
             .await
             .map_err(|e| {
                 DatabaseError::Config(format!(
-                    "Failed to check if template '{}' exists: {}",
-                    template_name, e
+                    "Failed to check if template '{template_name}' exists: {e}"
                 ))
             })?;
         Ok(!rows.is_empty())
@@ -186,8 +181,7 @@ impl TemplateManager {
         let drop_sql = format!("DROP DATABASE IF EXISTS {template_name}");
         self.pool.query(&drop_sql, &[]).await.map_err(|e| {
             DatabaseError::Config(format!(
-                "Failed to drop template database '{}': {}",
-                template_name, e
+                "Failed to drop template database '{template_name}': {e}"
             ))
         })?;
 
@@ -205,7 +199,7 @@ impl TemplateManager {
     pub async fn list_templates(&self) -> TemplateResult<Vec<String>> {
         let list_sql = "SELECT datname FROM pg_database WHERE datname LIKE '%template%' OR datname LIKE '%_tmpl'";
         let rows = self.pool.query(list_sql, &[]).await.map_err(|e| {
-            DatabaseError::Config(format!("Failed to list template databases: {}", e))
+            DatabaseError::Config(format!("Failed to list template databases: {e}"))
         })?;
 
         let mut templates = Vec::new();
@@ -240,10 +234,7 @@ impl TemplateManager {
             // Get the root path from change detector and scan files
             let scanner = FileScanner::new(change_detector.root_path());
             let scanned_files = scanner.scan().map_err(|e| {
-                DatabaseError::Config(format!(
-                    "Failed to scan files for change tracking: {}",
-                    e
-                ))
+                DatabaseError::Config(format!("Failed to scan files for change tracking: {e}"))
             })?;
 
             // Store metadata for change detection
@@ -251,10 +242,7 @@ impl TemplateManager {
                 .store_template_metadata(template_name, &scanned_files)
                 .await
                 .map_err(|e| {
-                    DatabaseError::Config(format!(
-                        "Failed to store change detection metadata: {}",
-                        e
-                    ))
+                    DatabaseError::Config(format!("Failed to store change detection metadata: {e}"))
                 })?;
 
             println!("📊 Change detection metadata stored for template: {template_name}");
@@ -272,17 +260,12 @@ impl TemplateManager {
     /// `true` if the template needs rebuilding, `false` if it's up to date
     pub async fn template_needs_rebuild(&self, template_name: &str) -> TemplateResult<bool> {
         match &self.change_detector {
-            Some(change_detector) => {
-                change_detector
-                    .template_needs_rebuild(template_name)
-                    .await
-                    .map_err(|e| {
-                        DatabaseError::Config(format!(
-                            "Failed to check if template needs rebuild: {}",
-                            e
-                        ))
-                    })
-            }
+            Some(change_detector) => change_detector
+                .template_needs_rebuild(template_name)
+                .await
+                .map_err(|e| {
+                    DatabaseError::Config(format!("Failed to check if template needs rebuild: {e}"))
+                }),
             None => {
                 // Without change detection, always assume rebuild is needed
                 // This is the safe default behavior
@@ -306,24 +289,25 @@ impl TemplateManager {
     ) -> TemplateResult<bool> {
         // Check if template exists and needs rebuilding
         let template_exists = self.template_exists(template_name).await?;
-        
+
         if template_exists {
             let needs_rebuild = self.template_needs_rebuild(template_name).await?;
-            
+
             if !needs_rebuild {
-                println!("⏩ Template '{}' is up to date, skipping creation", template_name);
+                println!("⏩ Template '{template_name}' is up to date, skipping creation");
                 return Ok(false);
             }
-            
-            println!("🔄 Template '{}' needs rebuilding due to file changes", template_name);
-            
+
+            println!("🔄 Template '{template_name}' needs rebuilding due to file changes");
+
             // Drop existing template before recreating
             self.drop_template(template_name).await?;
         }
 
         // Create (or recreate) template with change tracking
         if self.has_change_detection() {
-            self.create_template_with_change_tracking(template_name, sql_files).await?;
+            self.create_template_with_change_tracking(template_name, sql_files)
+                .await?;
         } else {
             self.create_template(template_name, sql_files).await?;
         }

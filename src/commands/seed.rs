@@ -19,6 +19,7 @@ pub fn handle_seed(output_name: &str, with_seeds: bool) -> Result<()> {
 }
 
 /// Handle the seed command asynchronously with real database cloning
+#[allow(clippy::too_many_lines)]
 pub async fn handle_seed_async(output_name: &str, with_seeds: bool) -> Result<()> {
     let start = Instant::now();
 
@@ -52,7 +53,7 @@ pub async fn handle_seed_async(output_name: &str, with_seeds: bool) -> Result<()
     // Step 2: Smart template creation with change detection
     let repo_path = PathBuf::from(&config.repository.path);
     println!("🔍 Scanning for SQL files and checking template state...");
-    
+
     let template_manager = TemplateManager::new_with_change_detection(
         pool.clone(),
         config.database.clone(),
@@ -61,14 +62,17 @@ pub async fn handle_seed_async(output_name: &str, with_seeds: bool) -> Result<()
 
     // Scan for SQL files
     let scanner = FileScanner::new(&repo_path);
-    let scanned_files = scanner.scan().map_err(|e| {
-        DbFastError::ConfigCreationFailed {
+    let scanned_files = scanner
+        .scan()
+        .map_err(|e| DbFastError::ConfigCreationFailed {
             message: format!("Failed to scan SQL files: {e}"),
-        }
-    })?;
+        })?;
 
     if scanned_files.is_empty() {
-        println!("⚠️  No SQL files found in repository path: {}", repo_path.display());
+        println!(
+            "⚠️  No SQL files found in repository path: {}",
+            repo_path.display()
+        );
         return Err(DbFastError::ConfigCreationFailed {
             message: "No SQL files found. Please check your repository path.".to_string(),
         });
@@ -91,13 +95,15 @@ pub async fn handle_seed_async(output_name: &str, with_seeds: bool) -> Result<()
     let template_duration = template_start.elapsed();
 
     if template_was_created {
-        println!("✅ Template '{}' created/updated in {}ms", 
-            config.database.template_name, 
+        println!(
+            "✅ Template '{}' created/updated in {}ms",
+            config.database.template_name,
             template_duration.as_millis()
         );
     } else {
-        println!("⏩ Template '{}' is up to date ({}ms check)", 
-            config.database.template_name, 
+        println!(
+            "⏩ Template '{}' is up to date ({}ms check)",
+            config.database.template_name,
             template_duration.as_millis()
         );
     }

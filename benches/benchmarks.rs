@@ -1,8 +1,9 @@
 //! Benchmarks for dbfast
 //! Generated on 2025-09-10
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 use dbfast::QueryBuilder;
+use std::hint::black_box;
 
 fn bench_query_builder_simple(c: &mut Criterion) {
     c.bench_function("query_builder_simple", |b| {
