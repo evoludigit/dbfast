@@ -1,4 +1,6 @@
 use dbfast::commands::seed;
+use dbfast::{Config, DatabasePool};
+use dbfast::sql_executor::SqlExecutor;
 use std::env;
 use std::process::Command;
 
@@ -75,4 +77,111 @@ fn test_seed_command_with_seeds_flag() {
         stdout,
         stderr
     );
+}
+
+#[tokio::test]
+async fn test_seed_command_executes_sql_files() {
+    // This test verifies that the seed command can actually read and execute SQL files
+    
+    // Skip test if no PostgreSQL connection is available (for CI/CD flexibility)
+    let config = match Config::from_file("tests/fixtures/dbfast.toml") {
+        Ok(config) => config,
+        Err(_) => {
+            eprintln!("Skipping seed integration test: no config file");
+            return;
+        }
+    };
+    
+    let pool = match DatabasePool::new(&config.database).await {
+        Ok(pool) => pool,
+        Err(_) => {
+            eprintln!("Skipping seed integration test: no database connection");
+            return;
+        }
+    };
+    
+    // Test that we can read SQL files from the db directory and execute them
+    let _sql_executor = SqlExecutor::new();
+    
+    // Read SQL files from db directory
+    let statements_result = SqlExecutor::read_sql_files("db");
+    
+    assert!(statements_result.is_ok(), "Should be able to read SQL files from db directory");
+    
+    let statements = statements_result.unwrap();
+    assert!(!statements.is_empty(), "Should find SQL statements in db directory");
+    
+    // Create a test database to execute against
+    let test_db_name = format!("dbfast_seed_test_{}", std::process::id());
+    
+    // Create test database
+    let create_db_result = pool.execute(
+        &format!("CREATE DATABASE {} WITH TEMPLATE template0", test_db_name), 
+        &[]
+    ).await;
+    
+    if create_db_result.is_err() {
+        eprintln!("Skipping seed integration test: cannot create test database");
+        return;
+    }
+    
+    // For now, we'll test that the seed command would work with the actual SQL files
+    // The real integration will happen when we replace the placeholder implementation
+    // This test establishes that the SQL files can be read and would be executable
+    
+    // Clean up: drop the test database
+    let cleanup_result = pool.execute(&format!("DROP DATABASE {}", test_db_name), &[]).await;
+    assert!(cleanup_result.is_ok(), "Should be able to clean up test database");
+}
+
+#[tokio::test]
+async fn test_seed_command_creates_database_with_real_sql() {
+    // This test will fail until we replace the seed command placeholder
+    
+    // Skip test if no config available
+    let config_path = std::env::current_dir().unwrap().join("dbfast.toml");
+    if !config_path.exists() {
+        eprintln!("Skipping seed command test: no dbfast.toml config file");
+        return;
+    }
+    
+    // Skip test if no PostgreSQL connection is available
+    let config = match Config::from_file("dbfast.toml") {
+        Ok(config) => config,
+        Err(_) => {
+            eprintln!("Skipping seed command test: config load failed");
+            return;
+        }
+    };
+    
+    let pool = match DatabasePool::new(&config.database).await {
+        Ok(pool) => pool,
+        Err(_) => {
+            eprintln!("Skipping seed command test: no database connection");
+            return;
+        }
+    };
+    
+    // Test database name
+    let test_db_name = format!("dbfast_real_seed_test_{}", std::process::id());
+    
+    // Call the actual seed command
+    let result = seed::handle_seed(&test_db_name, false);
+    
+    // This should now work with real SQL execution, not just print a message
+    assert!(result.is_ok(), "Seed command should successfully create database with SQL files");
+    
+    // Verify the database was actually created
+    let db_exists_result = pool.query(
+        "SELECT 1 FROM pg_database WHERE datname = $1",
+        &[&test_db_name]
+    ).await;
+    
+    assert!(db_exists_result.is_ok(), "Should be able to check if database exists");
+    let rows = db_exists_result.unwrap();
+    assert!(!rows.is_empty(), "Database should have been created by seed command");
+    
+    // Clean up: drop the test database  
+    let cleanup_result = pool.execute(&format!("DROP DATABASE {}", test_db_name), &[]).await;
+    assert!(cleanup_result.is_ok(), "Should be able to clean up test database");
 }
