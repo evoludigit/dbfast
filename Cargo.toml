@@ -18,23 +18,23 @@ path = "src/main.rs"
 clap = { version = "4.4", features = ["derive"] }
 tokio = { version = "1.35", features = ["full"] }
 tokio-postgres = "0.7"
-bb8 = "0.8"
-bb8-postgres = "0.8"
+bb8 = "0.9"
+bb8-postgres = "0.9"
 serde = { version = "1.0", features = ["derive"] }
-toml = "0.8"
+toml = "0.9"
 walkdir = "2.4"
 globset = "0.4"
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
-thiserror = "1.0"
+thiserror = "2.0"
 anyhow = "1.0"
 tracing = "0.1"
 futures = "0.3"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { version = "0.7", features = ["html_reports"] }
 tempfile = "3.8"
-testcontainers = "0.15"
+testcontainers = "0.25"
 assert_cmd = "2.0"
 
 [[bench]]
