@@ -1,5 +1,5 @@
 use crate::config::DatabaseConfig;
-/// Template management functionality for DBFast
+/// Template management functionality for `DBFast`
 ///
 /// Templates are created from SQL files and can be used for fast database cloning.
 use crate::database::{DatabaseError, DatabasePool};
@@ -58,8 +58,7 @@ impl TemplateManager {
         let create_db_sql = format!("CREATE DATABASE {template_name}");
         self.pool.query(&create_db_sql, &[]).await.map_err(|e| {
             DatabaseError::Config(format!(
-                "Failed to create template database '{}': {}",
-                template_name, e
+                "Failed to create template database '{template_name}': {e}"
             ))
         })?;
 
@@ -71,8 +70,7 @@ impl TemplateManager {
             .await
             .map_err(|e| {
                 DatabaseError::Config(format!(
-                    "Failed to connect to template database '{}': {}",
-                    template_name, e
+                    "Failed to connect to template database '{template_name}': {e}"
                 ))
             })?;
 
@@ -124,12 +122,11 @@ impl TemplateManager {
 
         let rows = self
             .pool
-            .query(&check_sql, &[&template_name])
+            .query(check_sql, &[&template_name])
             .await
             .map_err(|e| {
                 DatabaseError::Config(format!(
-                    "Failed to check if template '{}' exists: {}",
-                    template_name, e
+                    "Failed to check if template '{template_name}' exists: {e}"
                 ))
             })?;
         Ok(!rows.is_empty())
@@ -154,8 +151,7 @@ impl TemplateManager {
         let drop_sql = format!("DROP DATABASE IF EXISTS {template_name}");
         self.pool.query(&drop_sql, &[]).await.map_err(|e| {
             DatabaseError::Config(format!(
-                "Failed to drop template database '{}': {}",
-                template_name, e
+                "Failed to drop template database '{template_name}': {e}"
             ))
         })?;
 
@@ -173,7 +169,7 @@ impl TemplateManager {
     pub async fn list_templates(&self) -> TemplateResult<Vec<String>> {
         let list_sql = "SELECT datname FROM pg_database WHERE datname LIKE '%template%' OR datname LIKE '%_tmpl'";
         let rows = self.pool.query(list_sql, &[]).await.map_err(|e| {
-            DatabaseError::Config(format!("Failed to list template databases: {}", e))
+            DatabaseError::Config(format!("Failed to list template databases: {e}"))
         })?;
 
         let mut templates = Vec::new();

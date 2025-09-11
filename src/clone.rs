@@ -1106,20 +1106,16 @@ impl CloneManager {
 
         let tables_compared = if template_exists && clone_exists {
             // Enhanced schema comparison using PostgreSQL system catalogs
-            match self
+            if let Ok((table_count, schema_differences)) = self
                 .perform_detailed_schema_comparison(template_name, clone_name)
                 .await
             {
-                Ok((table_count, schema_differences)) => {
-                    differences.extend(schema_differences);
-                    table_count
-                }
-                Err(_) => {
-                    differences.push(
-                        "Advanced schema comparison unavailable - using basic check".to_string(),
-                    );
-                    1
-                }
+                differences.extend(schema_differences);
+                table_count
+            } else {
+                differences
+                    .push("Advanced schema comparison unavailable - using basic check".to_string());
+                1
             }
         } else {
             0
@@ -1132,7 +1128,7 @@ impl CloneManager {
         })
     }
 
-    /// Perform detailed schema comparison using PostgreSQL system catalogs
+    /// Perform detailed schema comparison using `PostgreSQL` system catalogs
     #[allow(clippy::single_match_else)]
     async fn perform_detailed_schema_comparison(
         &self,
@@ -1150,7 +1146,7 @@ impl CloneManager {
                        array_agg(column_name ORDER BY ordinal_position) as columns
                 FROM information_schema.columns c
                 JOIN pg_tables t ON c.table_name = t.tablename
-                WHERE c.table_catalog = '{}'
+                WHERE c.table_catalog = '{template_name}'
                 AND t.schemaname NOT IN ('information_schema', 'pg_catalog')
                 GROUP BY schemaname, tablename
             ),
@@ -1159,7 +1155,7 @@ impl CloneManager {
                        array_agg(column_name ORDER BY ordinal_position) as columns
                 FROM information_schema.columns c
                 JOIN pg_tables t ON c.table_name = t.tablename
-                WHERE c.table_catalog = '{}'
+                WHERE c.table_catalog = '{clone_name}'
                 AND t.schemaname NOT IN ('information_schema', 'pg_catalog')
                 GROUP BY schemaname, tablename
             )
@@ -1176,13 +1172,12 @@ impl CloneManager {
             FULL OUTER JOIN clone_tables c
             ON t.schemaname = c.schemaname AND t.tablename = c.tablename
             WHERE COALESCE(t.tablename, c.tablename) IS NOT NULL
-        "#,
-            template_name, clone_name
+        "#
         );
 
         let tables_compared = match self.pool.query(&table_comparison_query, &[]).await {
             Ok(rows) => {
-                for row in rows.iter() {
+                for row in &rows {
                     let schema_name: String = row.get("schema_name");
                     let table_name: String = row.get("table_name");
                     let comparison_result: String = row.get("comparison_result");
@@ -1202,7 +1197,7 @@ impl CloneManager {
                         _ => {} // "match" case - no difference
                     }
                 }
-                rows.len() as u32
+                u32::try_from(rows.len()).unwrap_or(0)
             }
             Err(_) => {
                 // Fallback if detailed comparison fails
@@ -1376,6 +1371,7 @@ impl CloneManager {
         };
 
         registry.insert(clone_name.to_string(), metadata);
+        drop(registry);
         Ok(())
     }
 
@@ -1482,7 +1478,7 @@ impl CloneManager {
         let mut recovered_operations = Vec::new();
 
         for (clone_name, _metadata) in recovery_candidates {
-            println!("🔧 Attempting recovery for partial clone: {}", clone_name);
+            println!("🔧 Attempting recovery for partial clone: {clone_name}");
 
             // Check if database exists
             let exists = self.verify_database_exists(&clone_name).await?;
@@ -1491,12 +1487,12 @@ impl CloneManager {
                 // Database exists but operation was marked as failed/incomplete - clean it up
                 match self.drop_database(&clone_name).await {
                     Ok(()) => {
-                        println!("✅ Recovered partial clone: {}", clone_name);
+                        println!("✅ Recovered partial clone: {clone_name}");
                         self.unregister_clone_operation(&clone_name).await;
                         recovered_operations.push(clone_name);
                     }
                     Err(err) => {
-                        println!("❌ Failed to recover partial clone {}: {}", clone_name, err);
+                        println!("❌ Failed to recover partial clone {clone_name}: {err}");
                         // Keep in registry for manual intervention
                     }
                 }
