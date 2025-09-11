@@ -32,7 +32,7 @@ futures = "0.3"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { version = "0.7", features = ["html_reports"] }
 tempfile = "3.8"
 testcontainers = "0.15"
 assert_cmd = "2.0"
