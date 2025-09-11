@@ -29,6 +29,7 @@ pub type CloneResult<T> = Result<T, DatabaseError>;
 /// # Ok(())
 /// # }
 /// ```
+#[derive(Clone)]
 pub struct CloneManager {
     pool: DatabasePool,
 }
