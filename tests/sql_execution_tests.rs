@@ -1,4 +1,5 @@
 use dbfast::sql_executor::SqlExecutor;
+use dbfast::{Config, DatabasePool};
 use std::path::PathBuf;
 
 #[test]
@@ -52,4 +53,32 @@ fn test_sql_file_ordering() {
     if let (Some(schema), Some(table)) = (schema_pos, table_pos) {
         assert!(schema < table, "Schema creation should come before table creation");
     }
+}
+
+#[tokio::test]
+async fn test_sql_execution_against_database() {
+    // This test will verify that we can execute SQL statements against a real database
+    
+    // For now, use the existing test config
+    let config = Config::from_file("tests/fixtures/dbfast.toml").unwrap();
+    let pool = DatabasePool::new(&config.database).await.unwrap();
+    
+    // Create a simple SQL executor that can execute statements
+    let executor = SqlExecutor::new();
+    
+    // Test simple SQL statements  
+    let statements = vec![
+        "CREATE SCHEMA IF NOT EXISTS test_schema".to_string(),
+        "CREATE TABLE test_schema.test_table (id INTEGER, name TEXT)".to_string(),
+        "INSERT INTO test_schema.test_table VALUES (1, 'test')".to_string(),
+    ];
+    
+    // This should work when we implement database execution
+    let result = executor.execute_statements(&pool, &statements).await;
+    
+    assert!(result.is_ok(), "Should be able to execute SQL statements against database");
+    
+    // Verify the data was inserted
+    let count_result = pool.query("SELECT COUNT(*) FROM test_schema.test_table", &[]).await;
+    assert!(count_result.is_ok(), "Should be able to query the created table");
 }

@@ -1,4 +1,5 @@
 /// SQL file execution functionality for DBFast
+use crate::database::DatabasePool;
 use crate::error::{DbFastError, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -77,5 +78,13 @@ impl SqlExecutor {
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .collect()
+    }
+
+    /// Execute SQL statements against a database
+    pub async fn execute_statements(&self, _pool: &DatabasePool, _statements: &[String]) -> Result<()> {
+        // Placeholder implementation - will be replaced with actual database execution
+        Err(DbFastError::ConfigCreationFailed {
+            message: "SQL statement execution not implemented yet".to_string(),
+        })
     }
 }
