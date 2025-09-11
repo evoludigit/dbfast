@@ -67,6 +67,17 @@ impl DatabasePool {
         Ok(rows)
     }
 
+    /// Execute a statement without returning results (for DDL/DML)
+    pub async fn execute(
+        &self,
+        query: &str,
+        params: &[&(dyn tokio_postgres::types::ToSql + Sync)],
+    ) -> Result<u64, DatabaseError> {
+        let conn = self.pool.get().await?;
+        let rows_affected = conn.execute(query, params).await?;
+        Ok(rows_affected)
+    }
+
     /// Get a connection for more complex operations (simplified for now)
     pub async fn get(&self) -> Result<DatabaseConnection, DatabaseError> {
         let _conn = self.pool.get().await?;

@@ -81,10 +81,29 @@ impl SqlExecutor {
     }
 
     /// Execute SQL statements against a database
-    pub async fn execute_statements(&self, _pool: &DatabasePool, _statements: &[String]) -> Result<()> {
-        // Placeholder implementation - will be replaced with actual database execution
-        Err(DbFastError::ConfigCreationFailed {
-            message: "SQL statement execution not implemented yet".to_string(),
-        })
+    pub async fn execute_statements(&self, pool: &DatabasePool, statements: &[String]) -> Result<()> {
+        // Execute each statement sequentially
+        for statement in statements {
+            let trimmed_statement = statement.trim();
+            if !trimmed_statement.is_empty() {
+                // Use execute for DDL/DML statements (CREATE, INSERT, UPDATE, DELETE)
+                // Use query for SELECT statements that return data
+                if trimmed_statement.to_uppercase().starts_with("SELECT") {
+                    let _result = pool.query(trimmed_statement, &[]).await.map_err(|e| {
+                        DbFastError::ConfigCreationFailed {
+                            message: format!("Failed to execute SQL query '{}': {}", trimmed_statement, e),
+                        }
+                    })?;
+                } else {
+                    let _result = pool.execute(trimmed_statement, &[]).await.map_err(|e| {
+                        DbFastError::ConfigCreationFailed {
+                            message: format!("Failed to execute SQL statement '{}': {}", trimmed_statement, e),
+                        }
+                    })?;
+                }
+            }
+        }
+        
+        Ok(())
     }
 }
