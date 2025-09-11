@@ -20,7 +20,7 @@ pub type TemplateResult<T> = Result<T, DatabaseError>;
 /// `CloneManager` for the complete template → clone workflow.
 ///
 /// # Example
-/// ```rust
+/// ```rust,no_run
 /// use dbfast::{Config, DatabasePool, template::TemplateManager};
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {

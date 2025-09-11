@@ -17,7 +17,7 @@ pub type CloneResult<T> = Result<T, DatabaseError>;
 /// Target: Database cloning in <100ms for small-to-medium databases
 ///
 /// # Example
-/// ```rust
+/// ```rust,no_run
 /// use dbfast::{Config, DatabasePool, clone::CloneManager};
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
