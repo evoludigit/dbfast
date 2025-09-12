@@ -35,7 +35,7 @@ pub struct RetryPolicy {
 }
 
 /// Backoff strategies for retry delays
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BackoffStrategy {
     /// Fixed delay between retries
     Fixed,
@@ -92,47 +92,55 @@ impl Default for RetryPolicy {
 
 impl RetryPolicy {
     /// Create a new retry policy with custom settings
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Set maximum number of attempts
-    pub fn with_max_attempts(mut self, max_attempts: u32) -> Self {
+    #[must_use]
+    pub const fn with_max_attempts(mut self, max_attempts: u32) -> Self {
         self.max_attempts = max_attempts;
         self
     }
 
     /// Set initial delay
-    pub fn with_initial_delay(mut self, delay: Duration) -> Self {
+    #[must_use]
+    pub const fn with_initial_delay(mut self, delay: Duration) -> Self {
         self.initial_delay = delay;
         self
     }
 
     /// Set maximum delay
-    pub fn with_max_delay(mut self, delay: Duration) -> Self {
+    #[must_use]
+    pub const fn with_max_delay(mut self, delay: Duration) -> Self {
         self.max_delay = delay;
         self
     }
 
     /// Set backoff strategy
-    pub fn with_backoff_strategy(mut self, strategy: BackoffStrategy) -> Self {
+    #[must_use]
+    pub const fn with_backoff_strategy(mut self, strategy: BackoffStrategy) -> Self {
         self.backoff_strategy = strategy;
         self
     }
 
     /// Enable or disable jitter
-    pub fn with_jitter(mut self, jitter: bool) -> Self {
+    #[must_use]
+    pub const fn with_jitter(mut self, jitter: bool) -> Self {
         self.jitter = jitter;
         self
     }
 
     /// Set custom retry condition
+    #[must_use]
     pub fn with_retry_condition(mut self, condition: fn(&DbFastError) -> bool) -> Self {
         self.retry_condition = condition;
         self
     }
 
     /// Execute an operation with retry logic
+    #[allow(clippy::future_not_send)]
     pub async fn execute<T, F, Fut>(&self, mut operation: F) -> RetryResult<T>
     where
         F: FnMut() -> Fut,
@@ -194,6 +202,7 @@ impl RetryPolicy {
     }
 
     /// Execute with callback for each retry attempt
+    #[allow(clippy::future_not_send)]
     pub async fn execute_with_callback<T, F, Fut, C>(
         &self,
         mut operation: F,
@@ -252,7 +261,10 @@ impl RetryPolicy {
             }
             BackoffStrategy::Fibonacci => {
                 let fib = fibonacci(attempt as usize);
-                self.initial_delay * fib as u32
+                #[allow(clippy::cast_possible_truncation)]
+                {
+                    self.initial_delay * fib as u32
+                }
             }
         };
 
@@ -260,8 +272,10 @@ impl RetryPolicy {
 
         // Add jitter if enabled
         if self.jitter {
+            #[allow(clippy::cast_precision_loss)]
             let jitter_amount = delay.as_millis() as f64 * 0.1; // 10% jitter
-            let jitter = fastrand::f64() * jitter_amount * 2.0 - jitter_amount;
+            let jitter = (fastrand::f64() * jitter_amount).mul_add(2.0, -jitter_amount);
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             let jitter_duration = Duration::from_millis(jitter as u64);
 
             if jitter >= 0.0 {
@@ -278,6 +292,7 @@ impl RetryPolicy {
 /// Predefined retry policies for common scenarios
 impl RetryPolicy {
     /// Policy for database operations
+    #[must_use]
     pub fn database_operations() -> Self {
         Self {
             max_attempts: 5,
@@ -285,16 +300,19 @@ impl RetryPolicy {
             max_delay: Duration::from_secs(10),
             backoff_strategy: BackoffStrategy::Exponential,
             jitter: true,
-            retry_condition: |error| match error {
-                DbFastError::Database { .. } => true,
-                DbFastError::Network { .. } => true,
-                DbFastError::Remote { .. } => true,
-                _ => false,
+            retry_condition: |error| {
+                matches!(
+                    error,
+                    DbFastError::Database { .. }
+                        | DbFastError::Network { .. }
+                        | DbFastError::Remote { .. }
+                )
             },
         }
     }
 
     /// Policy for network operations
+    #[must_use]
     pub fn network_operations() -> Self {
         Self {
             max_attempts: 3,
@@ -302,15 +320,17 @@ impl RetryPolicy {
             max_delay: Duration::from_secs(5),
             backoff_strategy: BackoffStrategy::Exponential,
             jitter: true,
-            retry_condition: |error| match error {
-                DbFastError::Network { .. } => true,
-                DbFastError::Remote { .. } => true,
-                _ => false,
+            retry_condition: |error| {
+                matches!(
+                    error,
+                    DbFastError::Network { .. } | DbFastError::Remote { .. }
+                )
             },
         }
     }
 
     /// Policy for file operations
+    #[must_use]
     pub fn file_operations() -> Self {
         Self {
             max_attempts: 3,
@@ -318,15 +338,17 @@ impl RetryPolicy {
             max_delay: Duration::from_secs(2),
             backoff_strategy: BackoffStrategy::Linear,
             jitter: false,
-            retry_condition: |error| match error {
-                DbFastError::FileSystem { .. } => true,
-                DbFastError::Resource { .. } => true,
-                _ => false,
+            retry_condition: |error| {
+                matches!(
+                    error,
+                    DbFastError::FileSystem { .. } | DbFastError::Resource { .. }
+                )
             },
         }
     }
 
     /// Aggressive retry policy for critical operations
+    #[must_use]
     pub fn critical_operations() -> Self {
         Self {
             max_attempts: 10,
@@ -339,6 +361,7 @@ impl RetryPolicy {
     }
 
     /// Fast retry policy for quick operations
+    #[must_use]
     pub fn fast_operations() -> Self {
         Self {
             max_attempts: 2,
@@ -346,16 +369,18 @@ impl RetryPolicy {
             max_delay: Duration::from_millis(100),
             backoff_strategy: BackoffStrategy::Fixed,
             jitter: false,
-            retry_condition: |error| match error.context().severity {
-                ErrorSeverity::Low | ErrorSeverity::Medium => true,
-                _ => false,
+            retry_condition: |error| {
+                matches!(
+                    error.context().severity,
+                    ErrorSeverity::Low | ErrorSeverity::Medium
+                )
             },
         }
     }
 }
 
 /// Default retry condition - retry if error is recoverable
-fn default_retry_condition(error: &DbFastError) -> bool {
+const fn default_retry_condition(error: &DbFastError) -> bool {
     error.is_recoverable()
 }
 
@@ -443,6 +468,7 @@ impl Default for CircuitBreakerConfig {
 
 impl CircuitBreaker {
     /// Create a new circuit breaker
+    #[must_use]
     pub fn new(config: Option<CircuitBreakerConfig>) -> Self {
         let config = config.unwrap_or_default();
 
@@ -458,6 +484,7 @@ impl CircuitBreaker {
     }
 
     /// Execute an operation with circuit breaker protection
+    #[allow(clippy::future_not_send)]
     pub async fn execute<T, F, Fut>(&mut self, operation: F) -> Result<T, DbFastError>
     where
         F: FnOnce() -> Fut,
@@ -471,8 +498,10 @@ impl CircuitBreaker {
                 } else {
                     return Err(DbFastError::Resource {
                         source: crate::errors::ResourceError::ConnectionLimit,
-                        context: crate::errors::ErrorContext::new("circuit_breaker", "retry")
-                            .with_severity(ErrorSeverity::High),
+                        context: Box::new(
+                            crate::errors::ErrorContext::new("circuit_breaker", "retry")
+                                .with_severity(ErrorSeverity::High),
+                        ),
                     });
                 }
             }
@@ -482,8 +511,10 @@ impl CircuitBreaker {
         if self.state == CircuitState::Open {
             return Err(DbFastError::Resource {
                 source: crate::errors::ResourceError::ConnectionLimit,
-                context: crate::errors::ErrorContext::new("circuit_breaker", "retry")
-                    .with_severity(ErrorSeverity::High),
+                context: Box::new(
+                    crate::errors::ErrorContext::new("circuit_breaker", "retry")
+                        .with_severity(ErrorSeverity::High),
+                ),
             });
         }
 
@@ -508,14 +539,11 @@ impl CircuitBreaker {
             self.stats.recent_results.pop_front();
         }
 
-        match self.state {
-            CircuitState::HalfOpen => {
-                self.stats.consecutive_successes += 1;
-                if self.stats.consecutive_successes >= self.config.success_threshold {
-                    self.transition_to_closed();
-                }
+        if self.state == CircuitState::HalfOpen {
+            self.stats.consecutive_successes += 1;
+            if self.stats.consecutive_successes >= self.config.success_threshold {
+                self.transition_to_closed();
             }
-            _ => {}
         }
     }
 
@@ -531,6 +559,7 @@ impl CircuitBreaker {
         self.last_failure_time = Some(std::time::Instant::now());
 
         // Check if we should open the circuit
+        #[allow(clippy::cast_possible_truncation)]
         let failure_count = self.stats.recent_results.iter().filter(|&&r| !r).count() as u32;
         if failure_count >= self.config.failure_threshold {
             self.transition_to_open();
@@ -559,18 +588,23 @@ impl CircuitBreaker {
     }
 
     /// Get current circuit state
-    pub fn state(&self) -> CircuitState {
+    #[must_use]
+    pub const fn state(&self) -> CircuitState {
         self.state
     }
 
     /// Get failure rate
+    #[must_use]
     pub fn failure_rate(&self) -> f64 {
         if self.stats.recent_results.is_empty() {
             return 0.0;
         }
 
         let failure_count = self.stats.recent_results.iter().filter(|&&r| !r).count();
-        failure_count as f64 / self.stats.recent_results.len() as f64
+        #[allow(clippy::cast_precision_loss)]
+        {
+            failure_count as f64 / self.stats.recent_results.len() as f64
+        }
     }
 }
 
@@ -596,7 +630,7 @@ mod tests {
 
         match result {
             RetryResult::Success(value) => assert_eq!(value, 42),
-            _ => panic!("Expected success"),
+            RetryResult::Failed { .. } => panic!("Expected success"),
         }
     }
 
@@ -615,7 +649,7 @@ mod tests {
                     if current_attempts < 3 {
                         Err(DbFastError::Network {
                             message: "Connection timeout".to_string(),
-                            context: crate::errors::ErrorContext::default(),
+                            context: Box::new(crate::errors::ErrorContext::default()),
                         })
                     } else {
                         Ok(42)
@@ -626,7 +660,7 @@ mod tests {
 
         match result {
             RetryResult::Success(value) => assert_eq!(value, 42),
-            _ => panic!("Expected success after retries"),
+            RetryResult::Failed { .. } => panic!("Expected success after retries"),
         }
     }
 

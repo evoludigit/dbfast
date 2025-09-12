@@ -25,29 +25,45 @@ pub struct ObservabilityManager {
     trace_context: Arc<RwLock<TraceContext>>,
 }
 
+/// Feature flags for observability capabilities
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)] // Feature flags are expected to have many bools
+pub struct ObservabilityFeatures {
+    /// Enable distributed tracing
+    pub tracing: bool,
+    /// Enable audit logging
+    pub audit_logging: bool,
+    /// Enable metrics export
+    pub metrics_export: bool,
+    /// Enable correlation ID tracking
+    pub correlation_ids: bool,
+    /// Enable security event logging
+    pub security_logging: bool,
+}
+
+impl Default for ObservabilityFeatures {
+    fn default() -> Self {
+        Self {
+            tracing: true,
+            audit_logging: true,
+            metrics_export: true,
+            correlation_ids: true,
+            security_logging: true,
+        }
+    }
+}
+
 /// Configuration for observability features
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ObservabilityConfig {
-    /// Enable distributed tracing
-    pub enable_tracing: bool,
-
-    /// Enable audit logging
-    pub enable_audit_logging: bool,
-
-    /// Enable metrics export
-    pub enable_metrics_export: bool,
+    /// Feature flags
+    pub features: ObservabilityFeatures,
 
     /// Metrics export interval in seconds
     pub metrics_export_interval: u64,
 
     /// Log level for structured logging
     pub log_level: String,
-
-    /// Enable correlation ID tracking
-    pub enable_correlation_ids: bool,
-
-    /// Enable security event logging
-    pub enable_security_logging: bool,
 
     /// Maximum trace context size
     pub max_trace_context_size: usize,
@@ -75,7 +91,7 @@ pub struct TraceContext {
 /// Audit logger for security and compliance
 #[derive(Debug)]
 pub struct AuditLogger {
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Configuration stored for future use
     config: ObservabilityConfig,
     audit_entries: Arc<RwLock<Vec<AuditEntry>>>,
 }
@@ -86,7 +102,7 @@ pub struct AuditEntry {
     /// Timestamp of the event
     pub timestamp: DateTime<Utc>,
 
-    /// Event type (authentication, authorization, data_access, etc.)
+    /// Event type (authentication, authorization, `data_access`, etc.)
     pub event_type: AuditEventType,
 
     /// User or system identifier
@@ -112,7 +128,7 @@ pub struct AuditEntry {
 }
 
 /// Types of audit events
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum AuditEventType {
     /// Authentication events
     Authentication,
@@ -174,7 +190,7 @@ pub enum RiskLevel {
 /// Metrics exporter for external monitoring systems
 #[derive(Debug)]
 pub struct MetricsExporter {
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Configuration stored for future use
     config: ObservabilityConfig,
     exported_metrics: Arc<RwLock<Vec<ExportedMetric>>>,
 }
@@ -267,13 +283,9 @@ pub struct ErrorInfo {
 impl Default for ObservabilityConfig {
     fn default() -> Self {
         Self {
-            enable_tracing: true,
-            enable_audit_logging: true,
-            enable_metrics_export: true,
+            features: ObservabilityFeatures::default(),
             metrics_export_interval: 60,
             log_level: "info".to_string(),
-            enable_correlation_ids: true,
-            enable_security_logging: true,
             max_trace_context_size: 100,
         }
     }
@@ -281,6 +293,7 @@ impl Default for ObservabilityConfig {
 
 impl ObservabilityManager {
     /// Create a new observability manager
+    #[must_use]
     pub fn new(config: ObservabilityConfig) -> Self {
         Self {
             audit_logger: Arc::new(AuditLogger::new(config.clone())),
@@ -294,15 +307,15 @@ impl ObservabilityManager {
     pub async fn start(&self) -> Result<(), DbFastError> {
         info!("Starting observability services");
 
-        if self.config.enable_tracing {
+        if self.config.features.tracing {
             self.start_tracing().await?;
         }
 
-        if self.config.enable_metrics_export {
+        if self.config.features.metrics_export {
             self.start_metrics_export().await?;
         }
 
-        if self.config.enable_audit_logging {
+        if self.config.features.audit_logging {
             self.start_audit_logging().await?;
         }
 
@@ -315,8 +328,7 @@ impl ObservabilityManager {
         debug!("Initializing distributed tracing");
 
         // Initialize trace context
-        let mut context = self.trace_context.write().await;
-        context.trace_id = Some(Uuid::new_v4().to_string());
+        self.trace_context.write().await.trace_id = Some(Uuid::new_v4().to_string());
 
         Ok(())
     }
@@ -350,13 +362,15 @@ impl ObservabilityManager {
 
     /// Create a new trace span
     pub async fn create_span(&self, name: &str, attributes: HashMap<String, String>) -> TraceSpan {
-        let mut context = self.trace_context.write().await;
-
         let span_id = Uuid::new_v4().to_string();
-        let parent_span_id = context.span_id.clone();
-
-        context.span_id = Some(span_id.clone());
-        context.attributes.extend(attributes.clone());
+        let (parent_span_id, ()) = {
+            let mut context = self.trace_context.write().await;
+            let parent = context.span_id.clone();
+            context.span_id = Some(span_id.clone());
+            context.attributes.extend(attributes.clone());
+            drop(context);
+            (parent, ())
+        };
 
         TraceSpan {
             span_id,
@@ -378,7 +392,7 @@ impl ObservabilityManager {
     }
 
     /// Log a structured message
-    pub fn log_structured(&self, entry: StructuredLogEntry) {
+    pub fn log_structured(entry: StructuredLogEntry) {
         let json = serde_json::to_string(&entry).unwrap_or_default();
 
         match entry.level.as_str() {
@@ -418,6 +432,7 @@ pub struct TraceSpan {
 
 impl TraceSpan {
     /// Finish the span
+    #[must_use]
     pub fn finish(self) -> FinishedSpan {
         FinishedSpan {
             span_id: self.span_id,
@@ -457,8 +472,15 @@ pub struct FinishedSpan {
     pub parent_span_id: Option<String>,
 }
 
+impl Default for TraceContext {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TraceContext {
     /// Create new trace context
+    #[must_use]
     pub fn new() -> Self {
         Self {
             trace_id: None,
@@ -472,6 +494,7 @@ impl TraceContext {
 
 impl AuditLogger {
     /// Create new audit logger
+    #[must_use]
     pub fn new(config: ObservabilityConfig) -> Self {
         Self {
             config,
@@ -482,8 +505,7 @@ impl AuditLogger {
     /// Log an audit event
     pub async fn log_event(&self, event: AuditEntry) -> Result<(), DbFastError> {
         // Add to in-memory store
-        let mut entries = self.audit_entries.write().await;
-        entries.push(event.clone());
+        self.audit_entries.write().await.push(event.clone());
 
         // Log to structured logging
         let log_entry = StructuredLogEntry {
@@ -512,11 +534,11 @@ impl AuditLogger {
                 );
                 fields.insert(
                     "result".to_string(),
-                    serde_json::to_value(&event.result).unwrap(),
+                    serde_json::to_value(event.result).unwrap(),
                 );
                 fields.insert(
                     "risk_level".to_string(),
-                    serde_json::to_value(&event.risk_level).unwrap(),
+                    serde_json::to_value(event.risk_level).unwrap(),
                 );
                 for (k, v) in event.context {
                     fields.insert(k, serde_json::Value::String(v));
@@ -558,6 +580,7 @@ impl AuditLogger {
 
 impl MetricsExporter {
     /// Create new metrics exporter
+    #[must_use]
     pub fn new(config: ObservabilityConfig) -> Self {
         Self {
             config,
@@ -567,8 +590,7 @@ impl MetricsExporter {
 
     /// Add metric for export
     pub async fn add_metric(&self, metric: ExportedMetric) -> Result<(), DbFastError> {
-        let mut metrics = self.exported_metrics.write().await;
-        metrics.push(metric);
+        self.exported_metrics.write().await.push(metric);
         Ok(())
     }
 
@@ -651,6 +673,7 @@ pub struct MetricsSummary {
 }
 
 /// Create an audit entry for authentication events
+#[must_use]
 pub fn create_auth_audit_entry(
     actor: &str,
     action: &str,
@@ -667,15 +690,15 @@ pub fn create_auth_audit_entry(
         context: HashMap::new(),
         risk_level: match result {
             AuditResult::Success => RiskLevel::Low,
-            AuditResult::Failure => RiskLevel::Medium,
+            AuditResult::Failure | AuditResult::PendingAuthorization => RiskLevel::Medium,
             AuditResult::Denied => RiskLevel::High,
-            AuditResult::PendingAuthorization => RiskLevel::Medium,
         },
         correlation_id,
     }
 }
 
 /// Create an audit entry for data access events
+#[must_use]
 pub fn create_data_access_audit_entry(
     actor: &str,
     resource: &str,
@@ -690,7 +713,7 @@ pub fn create_data_access_audit_entry(
         actor: actor.to_string(),
         resource: Some(resource.to_string()),
         action: action.to_string(),
-        result: result.clone(),
+        result,
         context: {
             let mut context = HashMap::new();
             context.insert("sensitive_data".to_string(), sensitive.to_string());
@@ -699,16 +722,13 @@ pub fn create_data_access_audit_entry(
         risk_level: if sensitive {
             match result {
                 AuditResult::Success => RiskLevel::Medium,
-                AuditResult::Failure => RiskLevel::High,
+                AuditResult::Failure | AuditResult::PendingAuthorization => RiskLevel::High,
                 AuditResult::Denied => RiskLevel::Critical,
-                AuditResult::PendingAuthorization => RiskLevel::High,
             }
         } else {
             match result {
-                AuditResult::Success => RiskLevel::Low,
-                AuditResult::Failure => RiskLevel::Medium,
-                AuditResult::Denied => RiskLevel::Medium,
-                AuditResult::PendingAuthorization => RiskLevel::Low,
+                AuditResult::Success | AuditResult::PendingAuthorization => RiskLevel::Low,
+                AuditResult::Failure | AuditResult::Denied => RiskLevel::Medium,
             }
         },
         correlation_id,
@@ -716,6 +736,8 @@ pub fn create_data_access_audit_entry(
 }
 
 /// Create a security audit entry
+#[allow(clippy::implicit_hasher)]
+#[must_use]
 pub fn create_security_audit_entry(
     actor: &str,
     action: &str,

@@ -10,70 +10,70 @@ use std::fmt;
 use thiserror::Error;
 use tracing::{error, warn};
 
-/// The main error type for DBFast operations
+/// The main error type for `DBFast` operations
 #[derive(Debug, Clone, Error)]
 pub enum DbFastError {
     /// Configuration-related errors
     #[error("Configuration error: {source}")]
     Config {
         source: ConfigurationError,
-        context: ErrorContext,
+        context: Box<ErrorContext>,
     },
 
     /// Database operation errors
     #[error("Database error: {source}")]
     Database {
         source: DatabaseError,
-        context: ErrorContext,
+        context: Box<ErrorContext>,
     },
 
     /// Remote operation errors
     #[error("Remote operation error: {source}")]
     Remote {
         source: RemoteError,
-        context: ErrorContext,
+        context: Box<ErrorContext>,
     },
 
     /// Deployment operation errors
     #[error("Deployment error: {source}")]
     Deployment {
         source: DeploymentError,
-        context: ErrorContext,
+        context: Box<ErrorContext>,
     },
 
     /// File system operation errors
     #[error("File system error: {message}")]
     FileSystem {
         message: String,
-        context: ErrorContext,
+        context: Box<ErrorContext>,
     },
 
     /// Network operation errors
     #[error("Network error: {message}")]
     Network {
         message: String,
-        context: ErrorContext,
+        context: Box<ErrorContext>,
     },
 
     /// Validation errors
     #[error("Validation error: {source}")]
     Validation {
         source: ValidationError,
-        context: ErrorContext,
+        context: Box<ErrorContext>,
     },
 
     /// Authentication/authorization errors
     #[error("Authentication error: {source}")]
     Auth {
         source: AuthenticationError,
-        context: ErrorContext,
+        context: Box<ErrorContext>,
     },
 
     /// System resource errors (memory, disk, etc.)
     #[error("Resource error: {source}")]
     Resource {
         source: ResourceError,
-        context: ErrorContext,
+        context: Box<ErrorContext>,
     },
 }
 
@@ -262,6 +262,7 @@ impl Default for ErrorContext {
 
 impl ErrorContext {
     /// Create a new error context
+    #[must_use]
     pub fn new(operation: &str, component: &str) -> Self {
         Self {
             operation: operation.to_string(),
@@ -273,18 +274,21 @@ impl ErrorContext {
     }
 
     /// Set the severity level
-    pub fn with_severity(mut self, severity: ErrorSeverity) -> Self {
+    #[must_use]
+    pub const fn with_severity(mut self, severity: ErrorSeverity) -> Self {
         self.severity = severity;
         self
     }
 
     /// Add additional context detail
+    #[must_use]
     pub fn with_detail(mut self, key: &str, value: &str) -> Self {
         self.details.insert(key.to_string(), value.to_string());
         self
     }
 
     /// Add multiple context details
+    #[must_use]
     pub fn with_details(mut self, details: std::collections::HashMap<String, String>) -> Self {
         self.details.extend(details);
         self
@@ -302,7 +306,7 @@ impl fmt::Display for ErrorSeverity {
     }
 }
 
-/// Result type for DBFast operations
+/// Result type for `DBFast` operations
 pub type DbFastResult<T> = Result<T, DbFastError>;
 
 /// Trait for adding context to errors
@@ -329,32 +333,16 @@ where
 
             // Add context to the error
             match &mut error {
-                DbFastError::Config { context, .. } => {
-                    *context = ErrorContext::new(operation, component);
-                }
-                DbFastError::Database { context, .. } => {
-                    *context = ErrorContext::new(operation, component);
-                }
-                DbFastError::Remote { context, .. } => {
-                    *context = ErrorContext::new(operation, component);
-                }
-                DbFastError::Deployment { context, .. } => {
-                    *context = ErrorContext::new(operation, component);
-                }
-                DbFastError::FileSystem { context, .. } => {
-                    *context = ErrorContext::new(operation, component);
-                }
-                DbFastError::Network { context, .. } => {
-                    *context = ErrorContext::new(operation, component);
-                }
-                DbFastError::Validation { context, .. } => {
-                    *context = ErrorContext::new(operation, component);
-                }
-                DbFastError::Auth { context, .. } => {
-                    *context = ErrorContext::new(operation, component);
-                }
-                DbFastError::Resource { context, .. } => {
-                    *context = ErrorContext::new(operation, component);
+                DbFastError::Config { context, .. }
+                | DbFastError::Database { context, .. }
+                | DbFastError::Remote { context, .. }
+                | DbFastError::Deployment { context, .. }
+                | DbFastError::FileSystem { context, .. }
+                | DbFastError::Network { context, .. }
+                | DbFastError::Validation { context, .. }
+                | DbFastError::Auth { context, .. }
+                | DbFastError::Resource { context, .. } => {
+                    **context = ErrorContext::new(operation, component);
                 }
             }
 
@@ -392,7 +380,8 @@ where
 /// Error reporting utilities
 impl DbFastError {
     /// Get the error context
-    pub fn context(&self) -> &ErrorContext {
+    #[must_use]
+    pub const fn context(&self) -> &ErrorContext {
         match self {
             Self::Config { context, .. }
             | Self::Database { context, .. }
@@ -438,6 +427,7 @@ impl DbFastError {
     }
 
     /// Get user-friendly error message
+    #[must_use]
     pub fn user_message(&self) -> String {
         match self {
             Self::Config { source, .. } => {
@@ -471,18 +461,21 @@ impl DbFastError {
     }
 
     /// Check if error is recoverable
-    pub fn is_recoverable(&self) -> bool {
+    #[must_use]
+    pub const fn is_recoverable(&self) -> bool {
         match self {
-            Self::Config { .. } | Self::Validation { .. } => false, // Usually not recoverable
-            Self::Network { .. } | Self::Database { .. } => true,   // Often recoverable with retry
-            Self::Remote { .. } => true,                            // May recover with retry
+            Self::Config { .. }
+            | Self::Validation { .. }
+            | Self::Auth { .. }
+            | Self::Resource { .. } => false, // Usually not recoverable
+            Self::Network { .. }
+            | Self::Database { .. }
+            | Self::Remote { .. }
+            | Self::FileSystem { .. } => true, // Often recoverable with retry
             Self::Deployment { source, .. } => {
                 // Some deployment errors are recoverable
                 !matches!(source, DeploymentError::RollbackFailed { .. })
             }
-            Self::FileSystem { .. } => true, // Often recoverable
-            Self::Auth { .. } => false,      // Usually requires user intervention
-            Self::Resource { .. } => false,  // System-level issue
         }
     }
 }
@@ -509,13 +502,13 @@ mod tests {
             source: ConfigurationError::NotFound {
                 path: "test".to_string(),
             },
-            context: ErrorContext::default(),
+            context: Box::new(ErrorContext::default()),
         };
         assert!(!config_error.is_recoverable());
 
         let network_error = DbFastError::Network {
             message: "Connection timeout".to_string(),
-            context: ErrorContext::default(),
+            context: Box::new(ErrorContext::default()),
         };
         assert!(network_error.is_recoverable());
     }
@@ -526,7 +519,7 @@ mod tests {
             source: DatabaseError::ConnectionFailed {
                 details: "Connection refused".to_string(),
             },
-            context: ErrorContext::default(),
+            context: Box::new(ErrorContext::default()),
         };
 
         let message = error.user_message();

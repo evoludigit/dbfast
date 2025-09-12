@@ -7,7 +7,7 @@
 //! - Security validation
 
 use crate::config::{Config, DatabaseConfig, Environment};
-use crate::errors::{DbFastResult, ValidationError};
+use crate::errors::ValidationError;
 use crate::remote::RemoteConfig;
 use std::collections::{HashMap, HashSet};
 use tracing::{debug, info, warn};
@@ -87,12 +87,14 @@ pub enum PerformanceImpact {
 
 impl ConfigValidator {
     /// Create a new configuration validator
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self
     }
 
     /// Validate a complete configuration
-    pub fn validate(&self, config: &Config) -> DbFastResult<ValidationResult> {
+    #[must_use]
+    pub fn validate(config: &Config) -> ValidationResult {
         info!("Starting comprehensive configuration validation");
 
         let mut result = ValidationResult {
@@ -104,22 +106,22 @@ impl ConfigValidator {
         };
 
         // Validate database configuration
-        self.validate_database_config(&config.database, &mut result);
+        Self::validate_database_config(&config.database, &mut result);
 
         // Validate environments
-        self.validate_environments(&config.environments, &mut result);
+        Self::validate_environments(&config.environments, &mut result);
 
         // Validate remotes
-        self.validate_remotes(&config.remotes, &config.environments, &mut result);
+        Self::validate_remotes(&config.remotes, &config.environments, &mut result);
 
         // Cross-validation between components
-        self.validate_cross_dependencies(config, &mut result);
+        Self::validate_cross_dependencies(config, &mut result);
 
         // Security validation
-        self.validate_security(config, &mut result);
+        Self::validate_security(config, &mut result);
 
         // Performance validation
-        self.validate_performance(config, &mut result);
+        Self::validate_performance(config, &mut result);
 
         // Update overall validity
         result.is_valid = result.errors.is_empty();
@@ -136,11 +138,11 @@ impl ConfigValidator {
             );
         }
 
-        Ok(result)
+        result
     }
 
     /// Validate database configuration
-    fn validate_database_config(&self, db_config: &DatabaseConfig, result: &mut ValidationResult) {
+    fn validate_database_config(db_config: &DatabaseConfig, result: &mut ValidationResult) {
         debug!("Validating database configuration");
 
         // Validate host
@@ -215,7 +217,6 @@ impl ConfigValidator {
 
     /// Validate environments configuration
     fn validate_environments(
-        &self,
         environments: &HashMap<String, Environment>,
         result: &mut ValidationResult,
     ) {
@@ -229,7 +230,6 @@ impl ConfigValidator {
         }
 
         // Check for standard environments
-        let _standard_envs = ["local", "development", "staging", "production"];
         let mut found_production = false;
 
         for (env_name, env_config) in environments {
@@ -255,7 +255,7 @@ impl ConfigValidator {
             }
 
             // Check for common directory patterns
-            self.validate_directory_patterns(env_name, env_config, result);
+            Self::validate_directory_patterns(env_name, env_config, result);
         }
 
         if !found_production {
@@ -281,7 +281,6 @@ impl ConfigValidator {
 
     /// Validate remote configurations
     fn validate_remotes(
-        &self,
         remotes: &HashMap<String, RemoteConfig>,
         environments: &HashMap<String, Environment>,
         result: &mut ValidationResult,
@@ -304,7 +303,7 @@ impl ConfigValidator {
                     value: format!("Invalid URL: {e}"),
                 });
             } else {
-                self.validate_remote_url(remote_name, &remote_config.url, result);
+                Self::validate_remote_url(remote_name, &remote_config.url, result);
             }
 
             // Validate environment reference
@@ -318,15 +317,15 @@ impl ConfigValidator {
             }
 
             // Security validations
-            self.validate_remote_security(remote_name, remote_config, result);
+            Self::validate_remote_security(remote_name, remote_config, result);
 
             // Performance recommendations
-            self.validate_remote_performance(remote_name, remote_config, result);
+            Self::validate_remote_performance(remote_name, remote_config, result);
         }
     }
 
     /// Validate cross-component dependencies
-    fn validate_cross_dependencies(&self, config: &Config, result: &mut ValidationResult) {
+    fn validate_cross_dependencies(config: &Config, result: &mut ValidationResult) {
         debug!("Validating cross-component dependencies");
 
         // Check for production remotes with appropriate environments
@@ -352,7 +351,7 @@ impl ConfigValidator {
     }
 
     /// Validate security aspects
-    fn validate_security(&self, config: &Config, result: &mut ValidationResult) {
+    fn validate_security(config: &Config, result: &mut ValidationResult) {
         debug!("Performing security validation");
 
         // Check for hardcoded credentials
@@ -393,7 +392,7 @@ impl ConfigValidator {
     }
 
     /// Validate performance aspects
-    fn validate_performance(&self, _config: &Config, result: &mut ValidationResult) {
+    fn validate_performance(_config: &Config, result: &mut ValidationResult) {
         debug!("Performing performance validation");
 
         // Add performance recommendations based on configuration patterns
@@ -408,7 +407,6 @@ impl ConfigValidator {
 
     /// Validate directory patterns in environments
     fn validate_directory_patterns(
-        &self,
         env_name: &str,
         env_config: &Environment,
         result: &mut ValidationResult,
@@ -462,7 +460,7 @@ impl ConfigValidator {
     }
 
     /// Validate remote URL for security and format
-    fn validate_remote_url(&self, remote_name: &str, url: &str, result: &mut ValidationResult) {
+    fn validate_remote_url(remote_name: &str, url: &str, result: &mut ValidationResult) {
         let parsed_url = Url::parse(url).unwrap(); // Already validated above
 
         // Check for secure connection
@@ -489,7 +487,6 @@ impl ConfigValidator {
 
     /// Validate remote security configuration
     fn validate_remote_security(
-        &self,
         remote_name: &str,
         remote_config: &RemoteConfig,
         result: &mut ValidationResult,
@@ -517,7 +514,6 @@ impl ConfigValidator {
 
     /// Validate remote performance configuration
     fn validate_remote_performance(
-        &self,
         remote_name: &str,
         remote_config: &RemoteConfig,
         result: &mut ValidationResult,
@@ -581,6 +577,7 @@ impl Default for ConfigValidator {
 
 impl ValidationResult {
     /// Check if validation has any issues (errors or high-severity warnings)
+    #[must_use]
     pub fn has_issues(&self) -> bool {
         !self.errors.is_empty()
             || self
@@ -596,6 +593,7 @@ impl ValidationResult {
     }
 
     /// Get a summary of validation issues
+    #[must_use]
     pub fn summary(&self) -> String {
         format!(
             "Validation: {} errors, {} warnings, {} security issues, {} performance recommendations",
@@ -642,8 +640,8 @@ mod tests {
     #[test]
     fn test_valid_config_passes_validation() {
         let config = create_test_config();
-        let validator = ConfigValidator::new();
-        let result = validator.validate(&config).unwrap();
+        let _validator = ConfigValidator::new();
+        let result = ConfigValidator::validate(&config);
 
         assert!(result.is_valid);
     }
@@ -653,8 +651,8 @@ mod tests {
         let mut config = create_test_config();
         config.database.template_name = "invalid-name!".to_string();
 
-        let validator = ConfigValidator::new();
-        let result = validator.validate(&config).unwrap();
+        let _validator = ConfigValidator::new();
+        let result = ConfigValidator::validate(&config);
 
         assert!(!result.is_valid);
         assert!(!result.errors.is_empty());
@@ -665,8 +663,8 @@ mod tests {
         let mut config = create_test_config();
         config.database.user = "postgres".to_string();
 
-        let validator = ConfigValidator::new();
-        let result = validator.validate(&config).unwrap();
+        let _validator = ConfigValidator::new();
+        let result = ConfigValidator::validate(&config);
 
         assert!(!result.security_issues.is_empty());
         assert!(result

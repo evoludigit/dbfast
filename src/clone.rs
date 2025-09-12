@@ -375,7 +375,8 @@ impl CloneManager {
     /// assert!(CloneManager::validate_database_name("db'; DROP TABLE users; --").is_err());
     /// assert!(CloneManager::validate_database_name("select").is_err()); // reserved word
     /// ```
-    #[allow(clippy::too_many_lines)] // Security validation requires comprehensive checks
+    // Security validation requires comprehensive checks
+    #[allow(clippy::too_many_lines)] // Validation function with extensive data
     pub fn validate_database_name(name: &str) -> CloneResult<()> {
         const MAX_NAME_LENGTH: usize = 63; // PostgreSQL identifier limit
         const MIN_NAME_LENGTH: usize = 2;

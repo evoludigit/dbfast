@@ -140,6 +140,7 @@ pub struct SystemMetrics {
 
 /// Memory usage metrics
 #[derive(Debug, Clone)]
+#[allow(clippy::struct_field_names)] // Consistent naming with 'bytes' suffix for clarity
 pub struct MemoryMetrics {
     /// Current memory usage in bytes
     pub current_usage_bytes: Option<u64>,
@@ -237,6 +238,7 @@ impl Default for MetricsConfig {
 
 impl MetricsCollector {
     /// Create a new metrics collector
+    #[must_use]
     pub fn new(config: Option<MetricsConfig>) -> Self {
         let config = config.unwrap_or_default();
 
@@ -266,6 +268,7 @@ impl MetricsCollector {
         duration: Duration,
         tags: Option<HashMap<String, String>>,
     ) {
+        #[allow(clippy::cast_possible_truncation)] // Microsecond precision sufficient for timing
         let duration_us = duration.as_micros() as u64;
 
         if let Ok(mut inner) = self.inner.lock() {
@@ -340,6 +343,7 @@ impl MetricsCollector {
             }
 
             // Clean old events
+            #[allow(clippy::cast_possible_wrap)]
             let cutoff = Utc::now() - chrono::Duration::minutes(rate_window as i64);
             while let Some(&front_time) = counter_metrics.recent_events.front() {
                 if front_time < cutoff {
@@ -350,7 +354,10 @@ impl MetricsCollector {
             }
 
             // Update rate
-            counter_metrics.rate_per_minute = counter_metrics.recent_events.len() as f64;
+            #[allow(clippy::cast_precision_loss)]
+            {
+                counter_metrics.rate_per_minute = counter_metrics.recent_events.len() as f64;
+            }
 
             debug!(
                 "Incremented counter {}: +{} (total: {})",
@@ -380,6 +387,7 @@ impl MetricsCollector {
             gauge_metrics.recent_values.push_back((Utc::now(), value));
 
             // Keep only recent values
+            #[allow(clippy::cast_possible_wrap)]
             let cutoff = Utc::now() - chrono::Duration::minutes(rate_window as i64);
             while let Some(&(timestamp, _)) = gauge_metrics.recent_values.front() {
                 if timestamp < cutoff {
@@ -394,8 +402,9 @@ impl MetricsCollector {
     }
 
     /// Get a snapshot of all current metrics
+    #[must_use]
     pub fn get_snapshot(&self) -> Option<MetricsSnapshot> {
-        if let Ok(inner) = self.inner.lock() {
+        self.inner.lock().map_or(None, |inner| {
             let mut timing_stats = HashMap::new();
             for (name, metrics) in &inner.timings {
                 timing_stats.insert(name.clone(), Self::calculate_timing_stats(metrics));
@@ -432,9 +441,7 @@ impl MetricsCollector {
                 gauges: gauge_stats,
                 system: system_metrics,
             })
-        } else {
-            None
-        }
+        })
     }
 
     /// Calculate timing statistics
@@ -454,23 +461,44 @@ impl MetricsCollector {
         let mut durations: Vec<u64> = metrics.samples.iter().map(|s| s.duration_us).collect();
         durations.sort_unstable();
 
+        #[allow(clippy::cast_precision_loss)]
         let avg_ms = (metrics.total_duration_us as f64 / metrics.total_count as f64) / 1000.0;
+        #[allow(clippy::cast_precision_loss)]
         let min_ms = metrics.min_duration_us as f64 / 1000.0;
+        #[allow(clippy::cast_precision_loss)]
         let max_ms = metrics.max_duration_us as f64 / 1000.0;
 
         // Calculate percentiles
+        #[allow(
+            clippy::cast_precision_loss,
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss
+        )]
         let p95_index = (durations.len() as f64 * 0.95) as usize;
+        #[allow(
+            clippy::cast_precision_loss,
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss
+        )]
         let p99_index = (durations.len() as f64 * 0.99) as usize;
 
         let p95_ms = durations
             .get(p95_index.min(durations.len() - 1))
-            .map(|&d| d as f64 / 1000.0)
-            .unwrap_or(0.0);
+            .map_or(0.0, |&d| {
+                #[allow(clippy::cast_precision_loss)]
+                {
+                    d as f64 / 1000.0
+                }
+            });
 
         let p99_ms = durations
             .get(p99_index.min(durations.len() - 1))
-            .map(|&d| d as f64 / 1000.0)
-            .unwrap_or(0.0);
+            .map_or(0.0, |&d| {
+                #[allow(clippy::cast_precision_loss)]
+                {
+                    d as f64 / 1000.0
+                }
+            });
 
         // Calculate ops per second based on recent samples
         let now = Utc::now();
@@ -480,6 +508,7 @@ impl MetricsCollector {
             .iter()
             .filter(|s| s.timestamp > one_minute_ago)
             .count();
+        #[allow(clippy::cast_precision_loss)]
         let ops_per_sec = recent_count as f64 / 60.0;
 
         TimingStats {
@@ -506,6 +535,7 @@ impl MetricsCollector {
 
         let values: Vec<f64> = metrics.recent_values.iter().map(|(_, v)| *v).collect();
         let sum: f64 = values.iter().sum();
+        #[allow(clippy::cast_precision_loss)]
         let average = sum / values.len() as f64;
         let min = values.iter().fold(f64::INFINITY, |a, &b| a.min(b));
         let max = values.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b));
@@ -548,15 +578,14 @@ impl MetricsCollector {
     }
 
     /// Get metrics for a specific operation
+    #[must_use]
     pub fn get_operation_metrics(&self, operation: &str) -> Option<TimingStats> {
-        if let Ok(inner) = self.inner.lock() {
+        self.inner.lock().map_or(None, |inner| {
             inner
                 .timings
                 .get(operation)
                 .map(Self::calculate_timing_stats)
-        } else {
-            None
-        }
+        })
     }
 }
 
@@ -570,6 +599,7 @@ pub struct TimingGuard {
 
 impl TimingGuard {
     /// Start timing an operation
+    #[must_use]
     pub fn new(
         collector: MetricsCollector,
         operation: String,
@@ -627,6 +657,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)] // Test values are exact
     fn test_timing_metrics() {
         let collector = MetricsCollector::new(None);
 
@@ -644,6 +675,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)] // Test values are exact
     fn test_counter_metrics() {
         let collector = MetricsCollector::new(None);
 
@@ -658,6 +690,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)] // Test values are exact
     fn test_gauge_metrics() {
         let collector = MetricsCollector::new(None);
 

@@ -31,38 +31,54 @@ pub struct SecurityManager {
     observability: Option<Arc<ObservabilityManager>>,
 }
 
+/// Security feature flags
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)] // Security flags are expected to have many bools
+pub struct SecurityFeatures {
+    /// Enable rate limiting
+    pub rate_limiting: bool,
+    /// Enable input validation
+    pub input_validation: bool,
+    /// Enable SQL injection detection
+    pub sql_injection_detection: bool,
+    /// Enable authentication
+    pub authentication: bool,
+    /// Enable encryption for sensitive data
+    pub encryption: bool,
+    /// Enable security event logging
+    pub security_logging: bool,
+}
+
+impl Default for SecurityFeatures {
+    fn default() -> Self {
+        Self {
+            rate_limiting: true,
+            input_validation: true,
+            sql_injection_detection: true,
+            authentication: true,
+            encryption: true,
+            security_logging: true,
+        }
+    }
+}
+
 /// Security configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecurityConfig {
-    /// Enable rate limiting
-    pub enable_rate_limiting: bool,
+    /// Security feature flags
+    pub features: SecurityFeatures,
 
     /// Maximum requests per minute per client
     pub max_requests_per_minute: u32,
 
-    /// Enable input validation
-    pub enable_input_validation: bool,
-
     /// Maximum input length
     pub max_input_length: usize,
-
-    /// Enable SQL injection detection
-    pub enable_sql_injection_detection: bool,
-
-    /// Enable authentication
-    pub enable_authentication: bool,
 
     /// Session timeout in minutes
     pub session_timeout_minutes: i64,
 
-    /// Enable encryption for sensitive data
-    pub enable_encryption: bool,
-
     /// Encryption key rotation interval in days
     pub key_rotation_days: u32,
-
-    /// Enable security event logging
-    pub enable_security_logging: bool,
 
     /// Failed login attempt threshold before lockout
     pub max_failed_login_attempts: u32,
@@ -71,7 +87,7 @@ pub struct SecurityConfig {
     pub account_lockout_minutes: i64,
 }
 
-/// Rate limiter to prevent DoS attacks
+/// Rate limiter to prevent `DoS` attacks
 #[derive(Debug)]
 pub struct RateLimiter {
     requests: Arc<RwLock<HashMap<String, ClientRateLimit>>>,
@@ -134,7 +150,7 @@ struct FailedAttemptTracker {
     attempt_count: u32,
 
     /// Time of first failed attempt in current window
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Used for lockout duration calculations
     first_attempt: DateTime<Utc>,
 
     /// Time when account is locked until
@@ -152,9 +168,9 @@ pub struct InputValidator {
 #[derive(Debug)]
 pub struct EncryptionManager {
     current_key: [u8; 32],
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Used for key rotation scheduling
     key_rotation_time: DateTime<Utc>,
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Configuration stored for future use
     config: SecurityConfig,
 }
 
@@ -259,16 +275,11 @@ pub enum SecurityAction {
 impl Default for SecurityConfig {
     fn default() -> Self {
         Self {
-            enable_rate_limiting: true,
+            features: SecurityFeatures::default(),
             max_requests_per_minute: 100,
-            enable_input_validation: true,
             max_input_length: 10_000,
-            enable_sql_injection_detection: true,
-            enable_authentication: true,
             session_timeout_minutes: 60,
-            enable_encryption: true,
             key_rotation_days: 30,
-            enable_security_logging: true,
             max_failed_login_attempts: 5,
             account_lockout_minutes: 15,
         }
@@ -277,6 +288,7 @@ impl Default for SecurityConfig {
 
 impl SecurityManager {
     /// Create a new security manager
+    #[must_use]
     pub fn new(config: SecurityConfig) -> Self {
         Self {
             rate_limiter: Arc::new(RateLimiter::new(config.clone())),
@@ -289,6 +301,7 @@ impl SecurityManager {
     }
 
     /// Set observability manager for security event logging
+    #[must_use]
     pub fn with_observability(mut self, observability: Arc<ObservabilityManager>) -> Self {
         self.observability = Some(observability);
         self
@@ -305,7 +318,7 @@ impl SecurityManager {
         let mut max_risk = RiskLevel::Low;
 
         // Rate limiting check
-        if self.config.enable_rate_limiting {
+        if self.config.features.rate_limiting {
             if let Some(rate_threat) = self.rate_limiter.check_rate_limit(client_id).await {
                 threats.push(rate_threat.clone());
                 if rate_threat.severity >= ThreatSeverity::High {
@@ -315,7 +328,7 @@ impl SecurityManager {
         }
 
         // Input validation
-        if self.config.enable_input_validation {
+        if self.config.features.input_validation {
             if let Some(input_threats) = self.input_validator.validate_input(input).await {
                 for threat in input_threats {
                     if threat.severity >= ThreatSeverity::High {
@@ -333,15 +346,15 @@ impl SecurityManager {
         let is_valid =
             threats.is_empty() || threats.iter().all(|t| t.severity < ThreatSeverity::High);
 
-        let recommended_action = if !is_valid {
+        let recommended_action = if is_valid {
+            SecurityAction::Allow
+        } else {
             match max_risk {
                 RiskLevel::Critical => SecurityAction::PermanentBan,
                 RiskLevel::High => SecurityAction::Block,
                 RiskLevel::Medium => SecurityAction::LogAndMonitor,
                 RiskLevel::Low => SecurityAction::Allow,
             }
-        } else {
-            SecurityAction::Allow
         };
 
         // Log security events
@@ -404,9 +417,11 @@ impl SecurityManager {
                 source: crate::errors::AuthenticationError::AccessDenied {
                     operation: "login".to_string(),
                 },
-                context: ErrorContext::new("authentication", "security")
-                    .with_severity(ErrorSeverity::High)
-                    .with_detail("reason", "account_locked"),
+                context: Box::new(
+                    ErrorContext::new("authentication", "security")
+                        .with_severity(ErrorSeverity::High)
+                        .with_detail("reason", "account_locked"),
+                ),
             });
         }
 
@@ -450,20 +465,24 @@ impl SecurityManager {
 
             Err(DbFastError::Auth {
                 source: crate::errors::AuthenticationError::InvalidCredentials,
-                context: ErrorContext::new("authentication", "security")
-                    .with_severity(ErrorSeverity::Medium)
-                    .with_detail("username", username),
+                context: Box::new(
+                    ErrorContext::new("authentication", "security")
+                        .with_severity(ErrorSeverity::Medium)
+                        .with_detail("username", username),
+                ),
             })
         }
     }
 
     /// Encrypt sensitive data
-    pub fn encrypt_data(&self, data: &[u8]) -> Result<Vec<u8>, DbFastError> {
+    #[must_use]
+    pub fn encrypt_data(&self, data: &[u8]) -> Vec<u8> {
         self.encryption_manager.encrypt(data)
     }
 
     /// Decrypt sensitive data
-    pub fn decrypt_data(&self, encrypted_data: &[u8]) -> Result<Vec<u8>, DbFastError> {
+    #[must_use]
+    pub fn decrypt_data(&self, encrypted_data: &[u8]) -> Vec<u8> {
         self.encryption_manager.decrypt(encrypted_data)
     }
 
@@ -473,10 +492,10 @@ impl SecurityManager {
     }
 
     /// Simple password verification (in production, use proper password hashing)
-    async fn verify_password(&self, _username: &str, _password: &str) -> bool {
+    async fn verify_password(&self, _username: &str, password: &str) -> bool {
         // This is a placeholder - in production use bcrypt, scrypt, or Argon2
         // For testing purposes, accept any non-empty password
-        !_password.is_empty()
+        !password.is_empty()
     }
 }
 
@@ -542,6 +561,7 @@ impl RateLimiter {
         }
     }
 
+    #[allow(clippy::significant_drop_tightening)]
     async fn check_rate_limit(&self, client_id: &str) -> Option<SecurityThreat> {
         let mut requests = self.requests.write().await;
         let now = Utc::now();
@@ -668,7 +688,7 @@ impl InputValidator {
         }
 
         // Check for SQL injection patterns
-        if self.config.enable_sql_injection_detection {
+        if self.config.features.sql_injection_detection {
             for pattern in &self.sql_injection_patterns {
                 if let Some(match_result) = pattern.find(input) {
                     threats.push(SecurityThreat {
@@ -726,6 +746,7 @@ impl AuthenticationManager {
         }
     }
 
+    #[allow(clippy::significant_drop_tightening)]
     async fn is_account_locked(&self, username: &str) -> bool {
         let failed_attempts = self.failed_attempts.read().await;
 
@@ -738,10 +759,10 @@ impl AuthenticationManager {
         false
     }
 
+    #[allow(clippy::significant_drop_tightening)]
     async fn record_failed_attempt(&self, username: &str) {
-        let mut failed_attempts = self.failed_attempts.write().await;
         let now = Utc::now();
-
+        let mut failed_attempts = self.failed_attempts.write().await;
         let tracker = failed_attempts
             .entry(username.to_string())
             .or_insert_with(|| FailedAttemptTracker {
@@ -781,8 +802,10 @@ impl AuthenticationManager {
             user_agent: client_info.user_agent,
         };
 
-        let mut sessions = self.sessions.write().await;
-        sessions.insert(session_id, session.clone());
+        self.sessions
+            .write()
+            .await
+            .insert(session_id, session.clone());
 
         Ok(session)
     }
@@ -797,12 +820,15 @@ impl AuthenticationManager {
             if session_age.num_minutes() > self.config.session_timeout_minutes {
                 // Session expired
                 sessions.remove(session_id);
+                drop(sessions);
 
                 Err(DbFastError::Auth {
                     source: crate::errors::AuthenticationError::TokenExpired,
-                    context: ErrorContext::new("session_validation", "security")
-                        .with_severity(ErrorSeverity::Medium)
-                        .with_detail("session_id", session_id),
+                    context: Box::new(
+                        ErrorContext::new("session_validation", "security")
+                            .with_severity(ErrorSeverity::Medium)
+                            .with_detail("session_id", session_id),
+                    ),
                 })
             } else {
                 // Update last activity
@@ -812,9 +838,11 @@ impl AuthenticationManager {
         } else {
             Err(DbFastError::Auth {
                 source: crate::errors::AuthenticationError::InvalidCredentials,
-                context: ErrorContext::new("session_validation", "security")
-                    .with_severity(ErrorSeverity::High)
-                    .with_detail("session_id", session_id),
+                context: Box::new(
+                    ErrorContext::new("session_validation", "security")
+                        .with_severity(ErrorSeverity::High)
+                        .with_detail("session_id", session_id),
+                ),
             })
         }
     }
@@ -827,23 +855,21 @@ impl EncryptionManager {
 
         Self {
             current_key: key,
-            key_rotation_time: Utc::now() + ChronoDuration::days(config.key_rotation_days as i64),
+            key_rotation_time: Utc::now()
+                + ChronoDuration::days(i64::from(config.key_rotation_days)),
             config,
         }
     }
 
-    fn encrypt(&self, data: &[u8]) -> Result<Vec<u8>, DbFastError> {
+    fn encrypt(&self, data: &[u8]) -> Vec<u8> {
         // Simple XOR encryption for demonstration - use AES in production
-        let encrypted: Vec<u8> = data
-            .iter()
+        data.iter()
             .enumerate()
             .map(|(i, &b)| b ^ self.current_key[i % 32])
-            .collect();
-
-        Ok(encrypted)
+            .collect()
     }
 
-    fn decrypt(&self, encrypted_data: &[u8]) -> Result<Vec<u8>, DbFastError> {
+    fn decrypt(&self, encrypted_data: &[u8]) -> Vec<u8> {
         // XOR is symmetric, so decryption is the same as encryption
         self.encrypt(encrypted_data)
     }
@@ -924,8 +950,8 @@ mod tests {
         let encryption_manager = EncryptionManager::new(config);
 
         let data = b"sensitive data";
-        let encrypted = encryption_manager.encrypt(data).unwrap();
-        let decrypted = encryption_manager.decrypt(&encrypted).unwrap();
+        let encrypted = encryption_manager.encrypt(data);
+        let decrypted = encryption_manager.decrypt(&encrypted);
 
         assert_eq!(data, decrypted.as_slice());
     }

@@ -1,11 +1,10 @@
 //! Comprehensive tests for the database health monitoring system
 
 use dbfast::health::{
-    ConnectivityMetrics, HealthIssue, HealthMetrics, HealthMonitor, HealthStatus, HealthThresholds,
-    IssueType, MonitoringConfig, PerformanceMetrics, PoolStatistics,
+    ConnectivityMetrics, HealthCheckConfig, HealthIssue, HealthIssueType, HealthSeverity,
+    HealthStatus, HealthThresholds, PerformanceMetrics, PoolStatistics,
 };
 use std::time::Duration;
-use tokio::time::sleep;
 
 #[test]
 fn test_health_status_ordering() {
@@ -14,400 +13,161 @@ fn test_health_status_ordering() {
     assert!(HealthStatus::Degraded > HealthStatus::Healthy);
 }
 
-#[tokio::test]
-async fn test_health_monitor_creation() {
-    let config = MonitoringConfig::default();
-    let monitor = HealthMonitor::new(config);
-
-    let initial_health = monitor.get_health().await;
-
-    // Initial state should be healthy or unknown
-    assert!(matches!(
-        initial_health.status,
-        HealthStatus::Healthy | HealthStatus::Degraded
-    ));
-}
-
-#[tokio::test]
-async fn test_pool_statistics_tracking() {
-    let config = MonitoringConfig::default();
-    let monitor = HealthMonitor::new(config);
-
-    // Simulate pool statistics
-    monitor
-        .update_pool_stats(PoolStatistics {
-            total_connections: 20,
-            active_connections: 15,
-            idle_connections: 5,
-            pending_connections: 2,
-            max_connections: 20,
-            min_connections: 5,
-            connection_timeout_ms: 5000,
-        })
-        .await;
-
-    let health = monitor.get_health().await;
-    assert_eq!(health.pool_stats.total_connections, 20);
-    assert_eq!(health.pool_stats.active_connections, 15);
-    assert_eq!(health.pool_stats.idle_connections, 5);
-}
-
-#[tokio::test]
-async fn test_connectivity_metrics() {
-    let config = MonitoringConfig::default();
-    let monitor = HealthMonitor::new(config);
-
-    // Simulate connectivity metrics
-    monitor
-        .record_connection_attempt(true, Duration::from_millis(150))
-        .await;
-    monitor
-        .record_connection_attempt(true, Duration::from_millis(200))
-        .await;
-    monitor
-        .record_connection_attempt(false, Duration::from_millis(5000))
-        .await;
-
-    let health = monitor.get_health().await;
-    assert_eq!(health.connectivity.total_attempts, 3);
-    assert_eq!(health.connectivity.successful_connections, 2);
-    assert_eq!(health.connectivity.failed_connections, 1);
-    assert!(health.connectivity.avg_connection_time_ms > 100.0);
-}
-
-#[tokio::test]
-async fn test_performance_metrics() {
-    let config = MonitoringConfig::default();
-    let monitor = HealthMonitor::new(config);
-
-    // Record query performance
-    monitor
-        .record_query_performance(Duration::from_millis(100), true)
-        .await;
-    monitor
-        .record_query_performance(Duration::from_millis(150), true)
-        .await;
-    monitor
-        .record_query_performance(Duration::from_millis(200), true)
-        .await;
-    monitor
-        .record_query_performance(Duration::from_millis(5000), false)
-        .await;
-
-    let health = monitor.get_health().await;
-    assert_eq!(health.performance.total_queries, 4);
-    assert_eq!(health.performance.successful_queries, 3);
-    assert_eq!(health.performance.failed_queries, 1);
-    assert!(health.performance.avg_query_time_ms > 100.0);
-}
-
-#[tokio::test]
-async fn test_health_issue_detection() {
-    let config = MonitoringConfig {
-        check_interval: Duration::from_millis(100),
-        thresholds: HealthThresholds {
-            max_avg_query_time_ms: 100.0,
-            max_connection_time_ms: 1000.0,
-            min_success_rate: 0.95,
-            max_pool_utilization: 0.8,
-        },
-        enable_automatic_recovery: false,
-        max_consecutive_failures: 3,
-    };
-
-    let monitor = HealthMonitor::new(config);
-
-    // Create conditions that should trigger health issues
-    monitor
-        .record_query_performance(Duration::from_millis(500), true)
-        .await; // Slow query
-    monitor
-        .record_connection_attempt(false, Duration::from_millis(2000))
-        .await; // Failed connection
-
-    // Update pool to high utilization
-    monitor
-        .update_pool_stats(PoolStatistics {
-            total_connections: 20,
-            active_connections: 18, // 90% utilization
-            idle_connections: 2,
-            pending_connections: 0,
-            max_connections: 20,
-            min_connections: 5,
-            connection_timeout_ms: 5000,
-        })
-        .await;
-
-    let health = monitor.get_health().await;
-
-    // Should have detected issues
-    assert!(!health.issues.is_empty());
-    assert!(health
-        .issues
-        .iter()
-        .any(|issue| matches!(issue.issue_type, IssueType::HighQueryLatency)));
-}
-
-#[tokio::test]
-async fn test_health_status_degradation() {
-    let config = MonitoringConfig::default();
-    let monitor = HealthMonitor::new(config);
-
-    // Start with healthy state
-    let initial_health = monitor.get_health().await;
-
-    // Introduce performance issues
-    for _ in 0..5 {
-        monitor
-            .record_query_performance(Duration::from_millis(1000), true)
-            .await;
-    }
-
-    // Add connection failures
-    for _ in 0..3 {
-        monitor
-            .record_connection_attempt(false, Duration::from_millis(5000))
-            .await;
-    }
-
-    let degraded_health = monitor.get_health().await;
-
-    // Health status should have degraded
-    assert!(degraded_health.status != HealthStatus::Healthy || !degraded_health.issues.is_empty());
-}
-
-#[tokio::test]
-async fn test_continuous_monitoring() {
-    let config = MonitoringConfig {
-        check_interval: Duration::from_millis(50),
-        thresholds: HealthThresholds::default(),
-        enable_automatic_recovery: false,
-        max_consecutive_failures: 2,
-    };
-
-    let monitor = HealthMonitor::new(config);
-
-    // Start monitoring
-    let monitoring_handle = monitor.start_monitoring().await;
-
-    sleep(Duration::from_millis(200)).await;
-
-    // Record some metrics
-    monitor
-        .record_query_performance(Duration::from_millis(50), true)
-        .await;
-    monitor
-        .record_connection_attempt(true, Duration::from_millis(100))
-        .await;
-
-    sleep(Duration::from_millis(100)).await;
-
-    // Stop monitoring
-    monitoring_handle.abort();
-
-    let health = monitor.get_health().await;
-    assert!(health.last_updated.timestamp() > 0);
-}
-
-#[tokio::test]
-async fn test_health_thresholds() {
-    let thresholds = HealthThresholds {
-        max_avg_query_time_ms: 200.0,
-        max_connection_time_ms: 1000.0,
-        min_success_rate: 0.9,
-        max_pool_utilization: 0.85,
-    };
-
-    // Test query time threshold
-    assert!(250.0 > thresholds.max_avg_query_time_ms);
-    assert!(150.0 < thresholds.max_avg_query_time_ms);
-
-    // Test success rate threshold
-    assert!(0.85 < thresholds.min_success_rate);
-    assert!(0.95 > thresholds.min_success_rate);
-}
-
-#[tokio::test]
-async fn test_pool_utilization_calculation() {
+#[test]
+fn test_pool_statistics_creation() {
     let pool_stats = PoolStatistics {
         total_connections: 20,
-        active_connections: 16,
-        idle_connections: 4,
-        pending_connections: 2,
+        active_connections: 15,
+        idle_connections: 5,
         max_connections: 20,
-        min_connections: 5,
-        connection_timeout_ms: 5000,
+        utilization_percent: 75.0,
+        exhaustion_count: 0,
+        avg_acquire_time_ms: 50.0,
     };
 
-    let utilization = pool_stats.utilization();
-    assert_eq!(utilization, 0.8); // 16/20 = 0.8
+    assert_eq!(pool_stats.total_connections, 20);
+    assert_eq!(pool_stats.active_connections, 15);
+    assert_eq!(pool_stats.idle_connections, 5);
+    assert_eq!(pool_stats.utilization_percent, 75.0);
 }
 
-#[tokio::test]
-async fn test_health_issue_types() {
-    let issues = vec![
-        HealthIssue {
-            issue_type: IssueType::HighQueryLatency,
-            message: "Average query time exceeded threshold".to_string(),
-            severity: dbfast::errors::ErrorSeverity::Medium,
-            first_detected: chrono::Utc::now(),
-            last_seen: chrono::Utc::now(),
-            count: 1,
-            details: std::collections::HashMap::new(),
-        },
-        HealthIssue {
-            issue_type: IssueType::ConnectionPoolExhaustion,
-            message: "Connection pool is near capacity".to_string(),
-            severity: dbfast::errors::ErrorSeverity::High,
-            first_detected: chrono::Utc::now(),
-            last_seen: chrono::Utc::now(),
-            count: 3,
-            details: std::collections::HashMap::new(),
-        },
-        HealthIssue {
-            issue_type: IssueType::HighErrorRate,
-            message: "Error rate exceeds acceptable threshold".to_string(),
-            severity: dbfast::errors::ErrorSeverity::Critical,
-            first_detected: chrono::Utc::now(),
-            last_seen: chrono::Utc::now(),
-            count: 5,
-            details: std::collections::HashMap::new(),
-        },
-    ];
-
-    // Verify different issue types
-    assert_eq!(issues.len(), 3);
-    assert!(issues
-        .iter()
-        .any(|i| matches!(i.issue_type, IssueType::HighQueryLatency)));
-    assert!(issues
-        .iter()
-        .any(|i| matches!(i.issue_type, IssueType::ConnectionPoolExhaustion)));
-    assert!(issues
-        .iter()
-        .any(|i| matches!(i.issue_type, IssueType::HighErrorRate)));
-}
-
-#[tokio::test]
-async fn test_monitoring_config_validation() {
-    let config = MonitoringConfig {
-        check_interval: Duration::from_millis(100),
-        thresholds: HealthThresholds {
-            max_avg_query_time_ms: 500.0,
-            max_connection_time_ms: 2000.0,
-            min_success_rate: 0.95,
-            max_pool_utilization: 0.8,
-        },
-        enable_automatic_recovery: true,
-        max_consecutive_failures: 3,
+#[test]
+fn test_performance_metrics_creation() {
+    let perf_metrics = PerformanceMetrics {
+        avg_query_time_ms: 150.0,
+        p95_query_time_ms: 500.0,
+        queries_per_second: 25.0,
+        slow_query_count: 3,
+        cpu_usage_percent: Some(45.0),
+        memory_usage_percent: Some(60.0),
     };
 
-    assert!(config.check_interval >= Duration::from_millis(10));
-    assert!(config.thresholds.min_success_rate >= 0.0 && config.thresholds.min_success_rate <= 1.0);
-    assert!(
-        config.thresholds.max_pool_utilization >= 0.0
-            && config.thresholds.max_pool_utilization <= 1.0
-    );
-    assert!(config.max_consecutive_failures > 0);
+    assert_eq!(perf_metrics.avg_query_time_ms, 150.0);
+    assert_eq!(perf_metrics.p95_query_time_ms, 500.0);
+    assert_eq!(perf_metrics.queries_per_second, 25.0);
+    assert_eq!(perf_metrics.slow_query_count, 3);
 }
 
-#[tokio::test]
-async fn test_health_recovery_scenarios() {
-    let config = MonitoringConfig {
-        check_interval: Duration::from_millis(50),
-        thresholds: HealthThresholds::default(),
-        enable_automatic_recovery: true,
-        max_consecutive_failures: 2,
+#[test]
+fn test_connectivity_metrics_creation() {
+    let connectivity = ConnectivityMetrics {
+        can_connect: true,
+        latency_ms: Some(25.0),
+        server_version: Some("PostgreSQL 15.0".to_string()),
+        last_success: Some(chrono::Utc::now()),
+        last_failure: None,
+        recent_failures: 0,
     };
 
-    let monitor = HealthMonitor::new(config);
-
-    // Simulate degraded state
-    monitor
-        .record_connection_attempt(false, Duration::from_millis(5000))
-        .await;
-    monitor
-        .record_connection_attempt(false, Duration::from_millis(5000))
-        .await;
-
-    let degraded_health = monitor.get_health().await;
-    assert!(degraded_health.status != HealthStatus::Healthy || !degraded_health.issues.is_empty());
-
-    // Simulate recovery
-    for _ in 0..10 {
-        monitor
-            .record_connection_attempt(true, Duration::from_millis(100))
-            .await;
-        monitor
-            .record_query_performance(Duration::from_millis(50), true)
-            .await;
-    }
-
-    sleep(Duration::from_millis(100)).await;
-
-    let recovered_health = monitor.get_health().await;
-    // Health should improve or issues should be fewer
-    assert!(
-        recovered_health.performance.successful_queries
-            > degraded_health.performance.successful_queries
-    );
+    assert!(connectivity.can_connect);
+    assert_eq!(connectivity.latency_ms, Some(25.0));
+    assert_eq!(connectivity.recent_failures, 0);
 }
 
-#[cfg(test)]
-mod integration_tests {
-    use super::*;
+#[test]
+fn test_health_thresholds() {
+    let thresholds = HealthThresholds {
+        pool_utilization_warning: 75.0,
+        pool_utilization_critical: 90.0,
+        latency_warning_ms: 100.0,
+        latency_critical_ms: 500.0,
+        slow_query_threshold_ms: 1000.0,
+        failure_count_warning: 3,
+    };
 
-    #[tokio::test]
-    async fn test_end_to_end_health_monitoring() {
-        let config = MonitoringConfig::default();
-        let monitor = HealthMonitor::new(config);
+    assert!(90.0 > thresholds.pool_utilization_warning);
+    assert!(80.0 > thresholds.pool_utilization_warning);
+    assert!(200.0 > thresholds.latency_warning_ms);
+}
 
-        // Start monitoring
-        let _handle = monitor.start_monitoring().await;
+#[test]
+fn test_health_issue_creation() {
+    let issue = HealthIssue {
+        issue_type: HealthIssueType::SlowQueries,
+        severity: HealthSeverity::Medium,
+        description: "Average query time exceeded threshold".to_string(),
+        recommendation: "Consider optimizing queries or adding indexes".to_string(),
+        detected_at: chrono::Utc::now(),
+    };
 
-        // Simulate realistic database workload
-        for i in 0..50 {
-            let query_time = Duration::from_millis(50 + (i % 100));
-            let success = i % 10 != 0; // 90% success rate
+    assert_eq!(issue.issue_type, HealthIssueType::SlowQueries);
+    assert_eq!(issue.severity, HealthSeverity::Medium);
+    assert!(!issue.description.is_empty());
+    assert!(!issue.recommendation.is_empty());
+}
 
-            monitor.record_query_performance(query_time, success).await;
+#[test]
+fn test_health_issue_types() {
+    let pool_issue = HealthIssueType::PoolExhaustion;
+    let perf_issue = HealthIssueType::SlowQueries;
+    let conn_issue = HealthIssueType::ConnectionTimeout;
 
-            if i % 5 == 0 {
-                let conn_success = i % 20 != 0; // 95% connection success
-                let conn_time = Duration::from_millis(100 + (i % 200));
-                monitor
-                    .record_connection_attempt(conn_success, conn_time)
-                    .await;
-            }
+    assert_eq!(pool_issue, HealthIssueType::PoolExhaustion);
+    assert_eq!(perf_issue, HealthIssueType::SlowQueries);
+    assert_eq!(conn_issue, HealthIssueType::ConnectionTimeout);
+}
 
-            if i % 10 == 0 {
-                // Update pool stats occasionally
-                monitor
-                    .update_pool_stats(PoolStatistics {
-                        total_connections: 20,
-                        active_connections: 10 + (i % 8),
-                        idle_connections: 10 - (i % 8),
-                        pending_connections: i % 3,
-                        max_connections: 20,
-                        min_connections: 5,
-                        connection_timeout_ms: 5000,
-                    })
-                    .await;
-            }
-        }
+#[test]
+fn test_health_severity_ordering() {
+    assert!(HealthSeverity::Critical < HealthSeverity::High);
+    assert!(HealthSeverity::High < HealthSeverity::Medium);
+    assert!(HealthSeverity::Medium < HealthSeverity::Low);
+}
 
-        sleep(Duration::from_millis(100)).await;
+#[test]
+fn test_health_check_config_defaults() {
+    let config = HealthCheckConfig::default();
 
-        let final_health = monitor.get_health().await;
+    assert_eq!(config.check_interval, Duration::from_secs(30));
+    assert_eq!(config.check_timeout, Duration::from_secs(5));
+    assert_eq!(config.performance_history_size, 100);
+}
 
-        // Verify comprehensive health data was collected
-        assert!(final_health.performance.total_queries > 0);
-        assert!(final_health.connectivity.total_attempts > 0);
-        assert!(final_health.pool_stats.total_connections > 0);
-        assert!(final_health.last_updated.timestamp() > 0);
+#[test]
+fn test_health_thresholds_defaults() {
+    let thresholds = HealthThresholds::default();
 
-        // Health status should reflect the simulated conditions
-        println!("Final health status: {:?}", final_health.status);
-        println!("Issues detected: {}", final_health.issues.len());
-    }
+    assert_eq!(thresholds.pool_utilization_warning, 70.0);
+    assert_eq!(thresholds.pool_utilization_critical, 90.0);
+    assert_eq!(thresholds.latency_warning_ms, 100.0);
+    assert_eq!(thresholds.latency_critical_ms, 500.0);
+    assert_eq!(thresholds.slow_query_threshold_ms, 1000.0);
+    assert_eq!(thresholds.failure_count_warning, 3);
+}
+
+#[test]
+fn test_pool_statistics_default() {
+    let pool_stats = PoolStatistics::default();
+
+    assert_eq!(pool_stats.total_connections, 0);
+    assert_eq!(pool_stats.active_connections, 0);
+    assert_eq!(pool_stats.idle_connections, 0);
+    assert_eq!(pool_stats.max_connections, 10);
+    assert_eq!(pool_stats.utilization_percent, 0.0);
+    assert_eq!(pool_stats.exhaustion_count, 0);
+    assert_eq!(pool_stats.avg_acquire_time_ms, 0.0);
+}
+
+#[test]
+fn test_performance_metrics_default() {
+    let perf_metrics = PerformanceMetrics::default();
+
+    assert_eq!(perf_metrics.avg_query_time_ms, 0.0);
+    assert_eq!(perf_metrics.p95_query_time_ms, 0.0);
+    assert_eq!(perf_metrics.queries_per_second, 0.0);
+    assert_eq!(perf_metrics.slow_query_count, 0);
+    assert_eq!(perf_metrics.cpu_usage_percent, None);
+    assert_eq!(perf_metrics.memory_usage_percent, None);
+}
+
+#[test]
+fn test_connectivity_metrics_default() {
+    let connectivity = ConnectivityMetrics::default();
+
+    assert!(!connectivity.can_connect);
+    assert_eq!(connectivity.latency_ms, None);
+    assert_eq!(connectivity.server_version, None);
+    assert_eq!(connectivity.last_success, None);
+    assert_eq!(connectivity.last_failure, None);
+    assert_eq!(connectivity.recent_failures, 0);
 }

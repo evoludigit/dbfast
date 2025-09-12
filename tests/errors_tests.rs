@@ -85,7 +85,7 @@ fn test_dbfast_error_creation() {
 
     let dbfast_error = DbFastError::Database {
         source: db_error,
-        context: context.clone(),
+        context: Box::new(context.clone()),
     };
 
     match dbfast_error {
@@ -101,13 +101,13 @@ fn test_dbfast_error_creation() {
 fn test_error_display_formatting() {
     let error = DbFastError::FileSystem {
         message: "Permission denied".to_string(),
-        context: ErrorContext {
+        context: Box::new(ErrorContext {
             operation: "read_config".to_string(),
             component: "config_loader".to_string(),
             details: HashMap::new(),
             severity: ErrorSeverity::High,
             timestamp: chrono::Utc::now(),
-        },
+        }),
     };
 
     let error_string = format!("{}", error);
@@ -210,7 +210,7 @@ mod error_integration_tests {
 
         let app_error = DbFastError::Config {
             source: root_cause,
-            context,
+            context: Box::new(context),
         };
 
         // Verify error can be formatted and contains relevant information
@@ -300,36 +300,36 @@ mod error_integration_tests {
             source: ConfigurationError::NotFound {
                 path: "/etc/dbfast.toml".to_string(),
             },
-            context: ErrorContext::new("startup", "config"),
+            context: Box::new(ErrorContext::new("startup", "config")),
         };
 
         let db_error = DbFastError::Database {
             source: DatabaseError::PoolExhausted,
-            context: ErrorContext::new("query", "pool"),
+            context: Box::new(ErrorContext::new("query", "pool")),
         };
 
         let remote_error = DbFastError::Remote {
             source: RemoteError::Timeout {
                 operation: "deploy".to_string(),
             },
-            context: ErrorContext::new("deployment", "remote"),
+            context: Box::new(ErrorContext::new("deployment", "remote")),
         };
 
         let deploy_error = DbFastError::Deployment {
             source: DeploymentError::TemplateCreationFailed {
                 reason: "missing files".to_string(),
             },
-            context: ErrorContext::new("deploy", "template"),
+            context: Box::new(ErrorContext::new("deploy", "template")),
         };
 
         let fs_error = DbFastError::FileSystem {
             message: "File not found".to_string(),
-            context: ErrorContext::new("read", "filesystem"),
+            context: Box::new(ErrorContext::new("read", "filesystem")),
         };
 
         let network_error = DbFastError::Network {
             message: "Connection refused".to_string(),
-            context: ErrorContext::new("connect", "network"),
+            context: Box::new(ErrorContext::new("connect", "network")),
         };
 
         // All errors should format correctly

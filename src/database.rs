@@ -58,16 +58,13 @@ impl DatabasePool {
                     "Reading password from environment variable: {}",
                     password_env
                 );
-                match env::var(password_env) {
-                    Ok(pwd) => pwd,
-                    Err(_) => {
-                        warn!(
-                            "Environment variable {} not found, using empty password",
-                            password_env
-                        );
-                        String::new()
-                    }
-                }
+                env::var(password_env).unwrap_or_else(|_| {
+                    warn!(
+                        "Environment variable {} not found, using empty password",
+                        password_env
+                    );
+                    String::new()
+                })
             });
 
         // Build connection string (hide password in logs)

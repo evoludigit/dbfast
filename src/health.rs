@@ -14,8 +14,11 @@ use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use tracing::{debug, error, info, warn};
 
+/// Type alias for performance history storage
+type PerformanceHistory = Arc<RwLock<Vec<(DateTime<Utc>, PerformanceMetrics)>>>;
+
 /// Health check status for database connections
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum HealthStatus {
     /// All systems operational
     Healthy,
@@ -75,7 +78,7 @@ pub struct PoolStatistics {
 }
 
 /// Database connectivity metrics
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ConnectivityMetrics {
     /// Whether basic connectivity test passed
     pub can_connect: bool,
@@ -175,7 +178,7 @@ pub struct HealthMonitor {
     metrics: Arc<RwLock<HealthMetrics>>,
 
     /// Historical performance data
-    performance_history: Arc<RwLock<Vec<(DateTime<Utc>, PerformanceMetrics)>>>,
+    performance_history: PerformanceHistory,
 
     /// Configuration for health checks
     config: HealthCheckConfig,
@@ -245,6 +248,7 @@ impl Default for HealthThresholds {
 
 impl HealthMonitor {
     /// Create a new health monitor
+    #[must_use]
     pub fn new(pool: DatabasePool, config: Option<HealthCheckConfig>) -> Self {
         let config = config.unwrap_or_default();
 
@@ -301,7 +305,7 @@ impl HealthMonitor {
                         match new_metrics.status {
                             HealthStatus::Healthy => debug!("Health check passed"),
                             HealthStatus::Degraded => {
-                                warn!("Health check shows degraded performance")
+                                warn!("Health check shows degraded performance");
                             }
                             HealthStatus::Warning => warn!(
                                 "Health check shows warning status: {} issues",
@@ -408,8 +412,8 @@ impl HealthMonitor {
             latency_ms: Some(latency_ms),
             server_version,
             last_success: if can_connect { Some(Utc::now()) } else { None },
-            last_failure: if !can_connect { Some(Utc::now()) } else { None },
-            recent_failures: if can_connect { 0 } else { 1 },
+            last_failure: if can_connect { None } else { Some(Utc::now()) },
+            recent_failures: u32::from(!can_connect),
         })
     }
 
@@ -548,11 +552,13 @@ impl HealthMonitor {
     }
 
     /// Get current health metrics
+    #[must_use]
     pub fn get_current_metrics(&self) -> Option<HealthMetrics> {
         self.metrics.read().ok().map(|m| m.clone())
     }
 
     /// Get performance history
+    #[must_use]
     pub fn get_performance_history(&self) -> Vec<(DateTime<Utc>, PerformanceMetrics)> {
         self.performance_history
             .read()
@@ -561,6 +567,7 @@ impl HealthMonitor {
     }
 
     /// Check if system is healthy
+    #[must_use]
     pub fn is_healthy(&self) -> bool {
         self.metrics
             .read()
@@ -583,19 +590,6 @@ impl Default for PoolStatistics {
     }
 }
 
-impl Default for ConnectivityMetrics {
-    fn default() -> Self {
-        Self {
-            can_connect: false,
-            latency_ms: None,
-            server_version: None,
-            last_success: None,
-            last_failure: None,
-            recent_failures: 0,
-        }
-    }
-}
-
 impl Default for PerformanceMetrics {
     fn default() -> Self {
         Self {
@@ -614,6 +608,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::float_cmp)] // Test values are exact
     fn test_health_thresholds_default() {
         let thresholds = HealthThresholds::default();
         assert_eq!(thresholds.pool_utilization_warning, 70.0);

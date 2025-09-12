@@ -48,14 +48,14 @@ pub struct RemoteConfig {
     pub require_confirmation: bool,
 }
 
-fn default_backup_before_deploy() -> bool {
+const fn default_backup_before_deploy() -> bool {
     true
 }
 
 impl RemoteConfig {
     /// Create a new remote configuration
     #[must_use]
-    pub fn new(name: String, url: String, environment: String) -> Self {
+    pub const fn new(name: String, url: String, environment: String) -> Self {
         Self {
             name: Some(name),
             url,
@@ -69,11 +69,12 @@ impl RemoteConfig {
 
     /// Get the password from environment variable
     pub fn get_password(&self) -> Result<String, RemoteError> {
-        if let Some(password_env) = &self.password_env {
-            env::var(password_env).map_err(|_| RemoteError::EnvVar(password_env.clone()))
-        } else {
-            Ok(String::new()) // No password required
-        }
+        self.password_env.as_ref().map_or_else(
+            || Ok(String::new()),
+            |password_env| {
+                env::var(password_env).map_err(|_| RemoteError::EnvVar(password_env.clone()))
+            },
+        )
     }
 
     /// Parse connection URL components

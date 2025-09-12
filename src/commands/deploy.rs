@@ -9,7 +9,7 @@ use tempfile::TempDir;
 use tracing::{debug, error, info, warn};
 
 /// Handle deploy command
-#[allow(clippy::too_many_lines)]
+#[allow(clippy::too_many_lines)] // Main async function with complex workflow
 pub async fn handle_deploy(
     remote_name: String,
     env_override: Option<String>,
