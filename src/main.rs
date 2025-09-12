@@ -56,9 +56,9 @@ fn main() {
                     allow_destructive,
                     skip_backup,
                 } => remote::handle_remote_add(
-                    name,
-                    url,
-                    env,
+                    &name,
+                    &url,
+                    &env,
                     password_env,
                     allow_destructive,
                     skip_backup,
@@ -67,9 +67,9 @@ fn main() {
                 RemoteCommands::Test { name } => {
                     // Handle async command in sync context
                     let rt = tokio::runtime::Runtime::new().unwrap();
-                    rt.block_on(remote::handle_remote_test(name))
+                    rt.block_on(remote::handle_remote_test(&name))
                 }
-                RemoteCommands::Remove { name } => remote::handle_remote_remove(name),
+                RemoteCommands::Remove { name } => remote::handle_remote_remove(&name),
             };
 
             if let Err(e) = result {

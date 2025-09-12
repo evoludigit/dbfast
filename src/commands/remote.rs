@@ -90,7 +90,7 @@ pub fn handle_remote_add(
     })?;
 
     info!("Successfully added remote '{}' to configuration", name);
-    println!("✅ Added remote '{}' successfully", name);
+    println!("✅ Added remote '{name}' successfully");
     Ok(())
 }
 
@@ -115,7 +115,7 @@ pub fn handle_remote_list(verbose: bool) -> Result<()> {
     println!();
 
     for (name, remote) in &config.remotes {
-        println!("🔗 {}", name);
+        println!("🔗 {name}");
 
         if let Ok(params) = remote.parse_connection_url() {
             println!("   Host:        {}:{}", params.host, params.port);
@@ -176,7 +176,7 @@ pub fn handle_remote_list(verbose: bool) -> Result<()> {
 }
 
 /// Handle remote test command
-pub async fn handle_remote_test(name: String) -> Result<()> {
+pub async fn handle_remote_test(name: &str) -> Result<()> {
     let config_path = "dbfast.toml";
 
     if !Path::new(config_path).exists() {
@@ -189,10 +189,10 @@ pub async fn handle_remote_test(name: String) -> Result<()> {
 
     let remote = config
         .remotes
-        .get(&name)
+        .get(name)
         .ok_or_else(|| anyhow::anyhow!("Remote '{}' not found", name))?;
 
-    println!("🧪 Testing connection to remote '{}'...", name);
+    println!("🧪 Testing connection to remote '{name}'...");
 
     // Parse connection URL
     let params = remote
@@ -217,7 +217,7 @@ pub async fn handle_remote_test(name: String) -> Result<()> {
             println!("   Password:    ✅ Available");
         }
         Err(e) => {
-            println!("   Password:    ❌ {}", e);
+            println!("   Password:    ❌ {e}");
             return Err(anyhow::anyhow!("Password error: {}", e));
         }
     }
@@ -230,14 +230,14 @@ pub async fn handle_remote_test(name: String) -> Result<()> {
     println!("   Connection:  ✅ Configuration valid (actual connection test not implemented yet)");
 
     println!();
-    println!("✅ Remote '{}' configuration is valid", name);
+    println!("✅ Remote '{name}' configuration is valid");
     println!("⚠️  Note: Actual database connectivity test not yet implemented");
 
     Ok(())
 }
 
 /// Handle remote remove command
-pub fn handle_remote_remove(name: String) -> Result<()> {
+pub fn handle_remote_remove(name: &str) -> Result<()> {
     let config_path = "dbfast.toml";
 
     if !Path::new(config_path).exists() {
@@ -248,11 +248,11 @@ pub fn handle_remote_remove(name: String) -> Result<()> {
 
     let mut config = Config::from_file(config_path)?;
 
-    if !config.remotes.contains_key(&name) {
+    if !config.remotes.contains_key(name) {
         return Err(anyhow::anyhow!("Remote '{}' not found", name));
     }
 
-    config.remotes.remove(&name);
+    config.remotes.remove(name);
 
     // Write back to file
     let toml_string = toml::to_string_pretty(&config)
@@ -261,6 +261,6 @@ pub fn handle_remote_remove(name: String) -> Result<()> {
     fs::write(config_path, toml_string)
         .map_err(|e| anyhow::anyhow!("Failed to write config file: {}", e))?;
 
-    println!("✅ Removed remote '{}' successfully", name);
+    println!("✅ Removed remote '{name}' successfully");
     Ok(())
 }

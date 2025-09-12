@@ -75,6 +75,7 @@ pub struct TraceContext {
 /// Audit logger for security and compliance
 #[derive(Debug)]
 pub struct AuditLogger {
+    #[allow(dead_code)]
     config: ObservabilityConfig,
     audit_entries: Arc<RwLock<Vec<AuditEntry>>>,
 }
@@ -173,6 +174,7 @@ pub enum RiskLevel {
 /// Metrics exporter for external monitoring systems
 #[derive(Debug)]
 pub struct MetricsExporter {
+    #[allow(dead_code)]
     config: ObservabilityConfig,
     exported_metrics: Arc<RwLock<Vec<ExportedMetric>>>,
 }

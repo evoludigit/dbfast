@@ -15,7 +15,12 @@
     clippy::missing_panics_doc,
     clippy::multiple_crate_versions,
     clippy::module_name_repetitions,
-    clippy::unused_async
+    clippy::unused_async,
+    missing_docs,
+    clippy::uninlined_format_args,
+    clippy::single_match_else,
+    clippy::match_bool,
+    clippy::needless_pass_by_value
 )]
 
 /// Backup management

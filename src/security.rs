@@ -134,6 +134,7 @@ struct FailedAttemptTracker {
     attempt_count: u32,
 
     /// Time of first failed attempt in current window
+    #[allow(dead_code)]
     first_attempt: DateTime<Utc>,
 
     /// Time when account is locked until
@@ -151,7 +152,9 @@ pub struct InputValidator {
 #[derive(Debug)]
 pub struct EncryptionManager {
     current_key: [u8; 32],
+    #[allow(dead_code)]
     key_rotation_time: DateTime<Utc>,
+    #[allow(dead_code)]
     config: SecurityConfig,
 }
 

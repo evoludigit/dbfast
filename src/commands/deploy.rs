@@ -9,6 +9,7 @@ use tempfile::TempDir;
 use tracing::{debug, error, info, warn};
 
 /// Handle deploy command
+#[allow(clippy::too_many_lines)]
 pub async fn handle_deploy(
     remote_name: String,
     env_override: Option<String>,
@@ -71,8 +72,8 @@ pub async fn handle_deploy(
     // Production safety checks
     if (target_env == "production" || remote_config.require_confirmation) && !yes && !dry_run {
         println!("⚠️  PRODUCTION DEPLOYMENT WARNING");
-        println!("   Remote: {}", remote_name);
-        println!("   Environment: {}", target_env);
+        println!("   Remote: {remote_name}");
+        println!("   Environment: {target_env}");
         println!(
             "   Destructive: {}",
             if remote_config.allow_destructive {
@@ -100,7 +101,7 @@ pub async fn handle_deploy(
 
     if dry_run {
         println!("✅ Dry run validation completed successfully");
-        println!("   Remote: {} ({})", remote_name, target_env);
+        println!("   Remote: {remote_name} ({target_env})");
         println!(
             "   Would create backup: {}",
             remote_config.backup_before_deploy && !skip_backup
@@ -150,11 +151,11 @@ pub async fn handle_deploy(
     // 5. Run post-deployment validation
 
     info!("🚀 Starting deployment simulation...");
-    println!("🚀 Deploying to {} ({})...", remote_name, target_env);
+    println!("🚀 Deploying to {remote_name} ({target_env})...");
 
     // Simulate template creation
     info!("Creating template for environment: {}", target_env);
-    println!("   📋 Creating template for environment: {}", target_env);
+    println!("   📋 Creating template for environment: {target_env}");
     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
     // Simulate dump creation
