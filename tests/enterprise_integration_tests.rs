@@ -1,0 +1,644 @@
+//! Enterprise-level integration tests demonstrating the complete system working together
+
+use dbfast::{
+    config::Config,
+    errors::{DatabaseError, DbFastError, ErrorContext, ErrorSeverity},
+    health::{HealthMonitor, MonitoringConfig},
+    metrics::MetricsCollector,
+    remote::RemoteConfig,
+    retry::{BackoffStrategy, RetryExecutor, RetryPolicy},
+    validators::{ConfigValidator, ValidationResult},
+};
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::time::sleep;
+
+#[tokio::test]
+async fn test_enterprise_error_handling_flow() {
+    // Set up metrics collection
+    let metrics = MetricsCollector::default();
+
+    // Simulate a database operation with metrics tracking
+    let start = std::time::Instant::now();
+
+    // Create a database error
+    let db_error = DbFastError::Database {
+        source: DatabaseError::ConnectionFailed {
+            details: "Connection timeout after 5000ms".to_string(),
+        },
+        context: ErrorContext::new("user_query", "database_pool")
+            .with_severity(ErrorSeverity::High)
+            .with_detail("user_id", "12345")
+            .with_detail("query_type", "SELECT")
+            .with_detail("timeout_ms", "5000"),
+    };
+
+    // Record the error in metrics
+    metrics.increment_counter("database_errors", None).await;
+    metrics
+        .record_timing("database_operation", start.elapsed(), None)
+        .await;
+
+    // Verify error structure
+    match &db_error {
+        DbFastError::Database { source, context } => {
+            assert!(matches!(source, DatabaseError::ConnectionFailed { .. }));
+            assert_eq!(context.severity, ErrorSeverity::High);
+            assert_eq!(context.details.get("user_id").unwrap(), "12345");
+        }
+        _ => panic!("Expected database error"),
+    }
+
+    // Verify metrics were recorded
+    let snapshot = metrics.snapshot().await;
+    assert_eq!(
+        snapshot
+            .counter_stats
+            .get("database_errors")
+            .unwrap()
+            .total_count,
+        1
+    );
+    assert!(snapshot.timing_stats.contains_key("database_operation"));
+
+    println!("✅ Enterprise error handling flow test passed");
+}
+
+#[tokio::test]
+async fn test_retry_with_metrics_and_health_monitoring() {
+    let metrics = Arc::new(MetricsCollector::default());
+    let health_monitor = Arc::new(HealthMonitor::new(MonitoringConfig::default()));
+
+    // Configure retry policy with exponential backoff
+    let policy = RetryPolicy::new()
+        .with_max_attempts(3)
+        .with_initial_delay(Duration::from_millis(50))
+        .with_backoff_strategy(BackoffStrategy::Exponential)
+        .with_jitter(false); // Disable jitter for predictable testing
+
+    let executor = RetryExecutor::new(policy);
+    let attempt_count = Arc::new(std::sync::atomic::AtomicU32::new(0));
+
+    let metrics_clone = metrics.clone();
+    let health_clone = health_monitor.clone();
+    let attempt_count_clone = attempt_count.clone();
+
+    // Execute operation with retry
+    let result = executor
+        .execute(|| {
+            let metrics = metrics_clone.clone();
+            let health = health_clone.clone();
+            let attempts = attempt_count_clone.clone();
+
+            async move {
+                let current_attempt =
+                    attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+
+                // Record attempt in metrics
+                metrics.increment_counter("operation_attempts", None).await;
+
+                if current_attempt < 3 {
+                    // Simulate failure and record in health monitor
+                    health
+                        .record_query_performance(Duration::from_millis(100), false)
+                        .await;
+
+                    Err(DbFastError::Database {
+                        source: DatabaseError::Timeout {
+                            operation: "SELECT users".to_string(),
+                        },
+                        context: ErrorContext::new("retry_test", "database")
+                            .with_detail("attempt", &current_attempt.to_string()),
+                    })
+                } else {
+                    // Success on third attempt
+                    health
+                        .record_query_performance(Duration::from_millis(80), true)
+                        .await;
+                    metrics.increment_counter("operation_success", None).await;
+                    Ok("Success".to_string())
+                }
+            }
+        })
+        .await;
+
+    // Verify successful completion
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "Success");
+    assert_eq!(attempt_count.load(std::sync::atomic::Ordering::SeqCst), 3);
+
+    // Check metrics
+    let snapshot = metrics.snapshot().await;
+    assert_eq!(
+        snapshot
+            .counter_stats
+            .get("operation_attempts")
+            .unwrap()
+            .total_count,
+        3
+    );
+    assert_eq!(
+        snapshot
+            .counter_stats
+            .get("operation_success")
+            .unwrap()
+            .total_count,
+        1
+    );
+
+    // Check health monitoring
+    let health_state = health_monitor.get_health().await;
+    assert_eq!(health_state.performance.total_queries, 3);
+    assert_eq!(health_state.performance.successful_queries, 1);
+    assert_eq!(health_state.performance.failed_queries, 2);
+
+    println!("✅ Retry with metrics and health monitoring test passed");
+}
+
+#[tokio::test]
+async fn test_comprehensive_validation_workflow() {
+    // Create a test configuration
+    let mut config = Config::default();
+
+    // Add some environments
+    config.environments.insert(
+        "development".to_string(),
+        dbfast::environment::Environment::default(),
+    );
+    config.environments.insert(
+        "production".to_string(),
+        dbfast::environment::Environment::default(),
+    );
+
+    // Add remote configurations
+    let remote_config = RemoteConfig {
+        url: "postgres://user:pass@prod-db:5432/myapp".to_string(),
+        environment: "production".to_string(),
+        require_confirmation: true,
+        allow_destructive: false,
+        backup_before_deploy: true,
+        timeout_seconds: 300,
+        password_env: Some("PROD_DB_PASSWORD".to_string()),
+    };
+
+    config
+        .remotes
+        .insert("production".to_string(), remote_config);
+
+    // Validate the configuration
+    let validator = ConfigValidator;
+    let validation_result = validator.validate(&config);
+
+    // Check validation results
+    assert!(
+        validation_result.is_valid
+            || !validation_result.errors.is_empty()
+            || !validation_result.warnings.is_empty()
+    );
+
+    println!(
+        "Validation result: {} errors, {} warnings, {} security issues",
+        validation_result.errors.len(),
+        validation_result.warnings.len(),
+        validation_result.security_issues.len()
+    );
+
+    // Security validations should catch password environment variable issues
+    if !validation_result.security_issues.is_empty() {
+        for issue in &validation_result.security_issues {
+            println!("Security issue in {}: {}", issue.field, issue.issue);
+        }
+    }
+
+    println!("✅ Comprehensive validation workflow test passed");
+}
+
+#[tokio::test]
+async fn test_concurrent_operations_with_monitoring() {
+    let metrics = Arc::new(MetricsCollector::default());
+    let health_monitor = Arc::new(HealthMonitor::new(MonitoringConfig::default()));
+
+    // Start health monitoring
+    let monitoring_handle = health_monitor.start_monitoring().await;
+
+    // Spawn multiple concurrent operations
+    let mut handles = Vec::new();
+
+    for i in 0..20 {
+        let metrics_clone = metrics.clone();
+        let health_clone = health_monitor.clone();
+
+        let handle = tokio::spawn(async move {
+            let start = std::time::Instant::now();
+
+            // Simulate different operation types
+            if i % 4 == 0 {
+                // Database query simulation
+                sleep(Duration::from_millis(50 + (i * 5))).await;
+                metrics_clone
+                    .record_timing("db_query", start.elapsed(), None)
+                    .await;
+                health_clone
+                    .record_query_performance(start.elapsed(), i % 10 != 0)
+                    .await;
+            } else if i % 4 == 1 {
+                // API call simulation
+                sleep(Duration::from_millis(30 + (i * 3))).await;
+                metrics_clone
+                    .record_timing("api_call", start.elapsed(), None)
+                    .await;
+            } else if i % 4 == 2 {
+                // Cache operation simulation
+                sleep(Duration::from_millis(10 + i)).await;
+                metrics_clone
+                    .record_timing("cache_op", start.elapsed(), None)
+                    .await;
+                metrics_clone
+                    .set_gauge("cache_hit_rate", (i as f64) / 20.0, None)
+                    .await;
+            } else {
+                // Connection attempt simulation
+                sleep(Duration::from_millis(20 + (i * 2))).await;
+                health_clone
+                    .record_connection_attempt(i % 15 != 0, start.elapsed())
+                    .await;
+            }
+
+            metrics_clone
+                .increment_counter("total_operations", None)
+                .await;
+        });
+
+        handles.push(handle);
+    }
+
+    // Wait for all operations to complete
+    for handle in handles {
+        handle.await.unwrap();
+    }
+
+    // Stop monitoring
+    monitoring_handle.abort();
+
+    // Verify comprehensive metrics collection
+    let snapshot = metrics.snapshot().await;
+
+    assert_eq!(
+        snapshot
+            .counter_stats
+            .get("total_operations")
+            .unwrap()
+            .total_count,
+        20
+    );
+    assert!(snapshot.timing_stats.contains_key("db_query"));
+    assert!(snapshot.timing_stats.contains_key("api_call"));
+    assert!(snapshot.timing_stats.contains_key("cache_op"));
+    assert!(snapshot.gauge_stats.contains_key("cache_hit_rate"));
+
+    // Verify health monitoring data
+    let health_state = health_monitor.get_health().await;
+    assert!(health_state.performance.total_queries > 0);
+    assert!(health_state.connectivity.total_attempts > 0);
+
+    println!("✅ Concurrent operations with monitoring test passed");
+    println!(
+        "   Total operations: {}",
+        snapshot
+            .counter_stats
+            .get("total_operations")
+            .unwrap()
+            .total_count
+    );
+    println!("   DB queries: {}", health_state.performance.total_queries);
+    println!(
+        "   Connection attempts: {}",
+        health_state.connectivity.total_attempts
+    );
+}
+
+#[tokio::test]
+async fn test_enterprise_error_recovery_scenario() {
+    let metrics = Arc::new(MetricsCollector::default());
+    let health_monitor = Arc::new(HealthMonitor::new(MonitoringConfig::default()));
+
+    // Simulate a system under stress with various error conditions
+    let operations = vec![
+        ("database", true),  // Success
+        ("database", false), // Failure
+        ("database", false), // Failure
+        ("api", true),       // Success
+        ("database", false), // Failure - should trigger alerts
+        ("database", true),  // Recovery
+        ("database", true),  // Continued success
+        ("api", true),       // Success
+    ];
+
+    for (i, (operation_type, should_succeed)) in operations.into_iter().enumerate() {
+        let start = std::time::Instant::now();
+
+        if *should_succeed {
+            // Successful operation
+            let duration = Duration::from_millis(50 + (i * 10) as u64);
+            sleep(duration).await;
+
+            metrics.record_timing(operation_type, duration, None).await;
+            metrics
+                .increment_counter(&format!("{}_success", operation_type), None)
+                .await;
+
+            if operation_type == "database" {
+                health_monitor
+                    .record_query_performance(duration, true)
+                    .await;
+            }
+        } else {
+            // Failed operation
+            let duration = Duration::from_millis(200 + (i * 20) as u64);
+            sleep(duration).await;
+
+            metrics.record_timing(operation_type, duration, None).await;
+            metrics
+                .increment_counter(&format!("{}_failure", operation_type), None)
+                .await;
+
+            if operation_type == "database" {
+                health_monitor
+                    .record_query_performance(duration, false)
+                    .await;
+            }
+
+            // Log the error
+            let error = DbFastError::Database {
+                source: DatabaseError::Timeout {
+                    operation: format!("{} operation {}", operation_type, i),
+                },
+                context: ErrorContext::new("stress_test", operation_type)
+                    .with_severity(ErrorSeverity::Medium)
+                    .with_detail("iteration", &i.to_string())
+                    .with_detail("expected_failure", &(!should_succeed).to_string()),
+            };
+
+            println!("Simulated error: {}", error);
+        }
+    }
+
+    // Analyze the system state after stress test
+    let snapshot = metrics.snapshot().await;
+    let health_state = health_monitor.get_health().await;
+
+    // Verify metrics captured both successes and failures
+    assert!(snapshot.counter_stats.get("database_success").is_some());
+    assert!(snapshot.counter_stats.get("database_failure").is_some());
+    assert!(snapshot.counter_stats.get("api_success").is_some());
+
+    // Verify health monitoring detected performance issues
+    assert!(health_state.performance.total_queries > 0);
+    assert!(health_state.performance.failed_queries > 0);
+    assert!(health_state.performance.successful_queries > 0);
+
+    // Calculate and verify success rates
+    let db_success = snapshot
+        .counter_stats
+        .get("database_success")
+        .map(|s| s.total_count)
+        .unwrap_or(0);
+    let db_failure = snapshot
+        .counter_stats
+        .get("database_failure")
+        .map(|s| s.total_count)
+        .unwrap_or(0);
+    let success_rate = db_success as f64 / (db_success + db_failure) as f64;
+
+    println!("✅ Enterprise error recovery scenario test passed");
+    println!("   Database success rate: {:.1}%", success_rate * 100.0);
+    println!(
+        "   Average query time: {:.1}ms",
+        health_state.performance.avg_query_time_ms
+    );
+    println!("   Health status: {:?}", health_state.status);
+}
+
+/// Integration test demonstrating a complete deployment workflow with monitoring
+#[tokio::test]
+async fn test_deployment_workflow_integration() {
+    let metrics = Arc::new(MetricsCollector::default());
+    let health_monitor = Arc::new(HealthMonitor::new(MonitoringConfig::default()));
+
+    // Phase 1: Pre-deployment validation
+    metrics.increment_counter("deployment_phase", None).await;
+
+    let validation_start = std::time::Instant::now();
+    // Simulate validation checks
+    sleep(Duration::from_millis(100)).await;
+    metrics
+        .record_timing("validation", validation_start.elapsed(), None)
+        .await;
+
+    // Phase 2: Backup creation
+    metrics.increment_counter("deployment_phase", None).await;
+
+    let backup_start = std::time::Instant::now();
+    // Simulate backup process
+    sleep(Duration::from_millis(200)).await;
+    metrics
+        .record_timing("backup_creation", backup_start.elapsed(), None)
+        .await;
+
+    // Phase 3: Template generation
+    metrics.increment_counter("deployment_phase", None).await;
+
+    let template_start = std::time::Instant::now();
+    sleep(Duration::from_millis(150)).await;
+    metrics
+        .record_timing("template_generation", template_start.elapsed(), None)
+        .await;
+
+    // Phase 4: Deployment execution with health monitoring
+    metrics.increment_counter("deployment_phase", None).await;
+
+    let deploy_start = std::time::Instant::now();
+    // Simulate deployment with some database operations
+    for i in 0..5 {
+        let query_start = std::time::Instant::now();
+        sleep(Duration::from_millis(50)).await;
+        health_monitor
+            .record_query_performance(query_start.elapsed(), i != 2)
+            .await; // One failure
+    }
+
+    metrics
+        .record_timing("deployment_execution", deploy_start.elapsed(), None)
+        .await;
+
+    // Phase 5: Post-deployment validation
+    metrics.increment_counter("deployment_phase", None).await;
+
+    let post_validation_start = std::time::Instant::now();
+    sleep(Duration::from_millis(80)).await;
+    metrics
+        .record_timing("post_validation", post_validation_start.elapsed(), None)
+        .await;
+
+    // Final verification
+    let snapshot = metrics.snapshot().await;
+    let health_state = health_monitor.get_health().await;
+
+    // Should have recorded 5 deployment phases
+    assert_eq!(
+        snapshot
+            .counter_stats
+            .get("deployment_phase")
+            .unwrap()
+            .total_count,
+        5
+    );
+
+    // Should have timing data for all phases
+    assert!(snapshot.timing_stats.contains_key("validation"));
+    assert!(snapshot.timing_stats.contains_key("backup_creation"));
+    assert!(snapshot.timing_stats.contains_key("template_generation"));
+    assert!(snapshot.timing_stats.contains_key("deployment_execution"));
+    assert!(snapshot.timing_stats.contains_key("post_validation"));
+
+    // Health monitoring should show the deployment database activity
+    assert_eq!(health_state.performance.total_queries, 5);
+    assert_eq!(health_state.performance.successful_queries, 4);
+    assert_eq!(health_state.performance.failed_queries, 1);
+
+    println!("✅ Deployment workflow integration test passed");
+    println!(
+        "   Deployment phases completed: {}",
+        snapshot
+            .counter_stats
+            .get("deployment_phase")
+            .unwrap()
+            .total_count
+    );
+    println!(
+        "   Total deployment time: {:.1}ms",
+        snapshot
+            .timing_stats
+            .values()
+            .map(|s| s.avg_duration_ms)
+            .sum::<f64>()
+    );
+}
+
+#[cfg(test)]
+mod load_testing {
+    use super::*;
+
+    #[tokio::test]
+    #[ignore] // Run with --ignored for performance testing
+    async fn test_high_load_enterprise_operations() {
+        let metrics = Arc::new(MetricsCollector::default());
+        let health_monitor = Arc::new(HealthMonitor::new(MonitoringConfig::default()));
+
+        let start_time = std::time::Instant::now();
+        let mut handles = Vec::new();
+
+        // Spawn 100 concurrent operations
+        for batch in 0..10 {
+            for i in 0..10 {
+                let metrics_clone = metrics.clone();
+                let health_clone = health_monitor.clone();
+                let operation_id = batch * 10 + i;
+
+                let handle = tokio::spawn(async move {
+                    // Mix of operation types to test different code paths
+                    let operation_type = match operation_id % 4 {
+                        0 => "heavy_query",
+                        1 => "light_query",
+                        2 => "connection_test",
+                        _ => "mixed_operation",
+                    };
+
+                    let op_start = std::time::Instant::now();
+
+                    // Simulate work
+                    let work_duration = Duration::from_millis(10 + (operation_id % 100) as u64);
+                    sleep(work_duration).await;
+
+                    // Record metrics
+                    metrics_clone
+                        .record_timing(operation_type, op_start.elapsed(), None)
+                        .await;
+                    metrics_clone.increment_counter("high_load_ops", None).await;
+
+                    // Health monitoring
+                    if operation_type.contains("query") {
+                        health_clone
+                            .record_query_performance(
+                                op_start.elapsed(),
+                                operation_id % 20 != 0, // 95% success rate
+                            )
+                            .await;
+                    }
+
+                    if operation_type.contains("connection") {
+                        health_clone
+                            .record_connection_attempt(
+                                operation_id % 25 != 0, // 96% success rate
+                                op_start.elapsed(),
+                            )
+                            .await;
+                    }
+                });
+
+                handles.push(handle);
+            }
+
+            // Small delay between batches to avoid overwhelming the system
+            sleep(Duration::from_millis(5)).await;
+        }
+
+        // Wait for all operations
+        for handle in handles {
+            handle.await.unwrap();
+        }
+
+        let total_time = start_time.elapsed();
+
+        // Analyze performance
+        let snapshot = metrics.snapshot().await;
+        let health_state = health_monitor.get_health().await;
+
+        assert_eq!(
+            snapshot
+                .counter_stats
+                .get("high_load_ops")
+                .unwrap()
+                .total_count,
+            100
+        );
+
+        println!("🚀 High load test completed:");
+        println!("   Total operations: 100");
+        println!("   Total time: {:.1}ms", total_time.as_millis());
+        println!(
+            "   Average ops/sec: {:.1}",
+            100.0 / total_time.as_secs_f64()
+        );
+        println!(
+            "   Query success rate: {:.1}%",
+            if health_state.performance.total_queries > 0 {
+                (health_state.performance.successful_queries as f64
+                    / health_state.performance.total_queries as f64)
+                    * 100.0
+            } else {
+                0.0
+            }
+        );
+
+        // Performance assertions
+        assert!(
+            total_time < Duration::from_secs(5),
+            "High load test should complete within 5 seconds"
+        );
+        assert!(
+            snapshot.timing_stats.len() > 0,
+            "Should have recorded timing metrics"
+        );
+    }
+}

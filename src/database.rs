@@ -5,6 +5,7 @@ use bb8_postgres::PostgresConnectionManager;
 use std::env;
 use thiserror::Error;
 use tokio_postgres::{NoTls, Row};
+use tracing::{debug, error, info, warn};
 
 /// Database-related errors
 #[derive(Debug, Error)]
@@ -33,6 +34,11 @@ pub struct DatabasePool {
 impl DatabasePool {
     /// Create a new database connection pool for the default database
     pub async fn new(config: &DatabaseConfig) -> Result<Self, DatabaseError> {
+        info!("Creating database connection pool for default database");
+        debug!(
+            "Database config: host={}:{}, user={}",
+            config.host, config.port, config.user
+        );
         Self::new_for_database(config, "postgres").await
     }
 
@@ -41,27 +47,62 @@ impl DatabasePool {
         config: &DatabaseConfig,
         database_name: &str,
     ) -> Result<Self, DatabaseError> {
+        info!("Creating connection pool for database: {}", database_name);
+
         // Get password from environment variable
         let password = config
             .password_env
             .as_ref()
             .map_or_else(String::new, |password_env| {
-                env::var(password_env).unwrap_or_else(|_| String::new())
+                debug!(
+                    "Reading password from environment variable: {}",
+                    password_env
+                );
+                match env::var(password_env) {
+                    Ok(pwd) => pwd,
+                    Err(_) => {
+                        warn!(
+                            "Environment variable {} not found, using empty password",
+                            password_env
+                        );
+                        String::new()
+                    }
+                }
             });
 
-        // Build connection string
+        // Build connection string (hide password in logs)
         let connection_string = format!(
             "host={} port={} user={} password={} dbname={}",
             config.host, config.port, config.user, password, database_name
         );
 
+        debug!(
+            "Creating connection pool: host={}:{}, user={}, database={}",
+            config.host, config.port, config.user, database_name
+        );
+
         // Create connection manager
         let manager = PostgresConnectionManager::new_from_stringlike(connection_string, NoTls)
-            .map_err(|e| DatabaseError::Config(e.to_string()))?;
+            .map_err(|e| {
+                error!("Failed to create connection manager: {}", e);
+                DatabaseError::Config(e.to_string())
+            })?;
 
         // Create pool
-        let pool = Pool::builder().max_size(10).build(manager).await?;
+        debug!("Building connection pool with max_size=10");
+        let pool = Pool::builder()
+            .max_size(10)
+            .build(manager)
+            .await
+            .map_err(|e| {
+                error!("Failed to build connection pool: {}", e);
+                e
+            })?;
 
+        info!(
+            "Successfully created connection pool for database: {}",
+            database_name
+        );
         Ok(Self { pool })
     }
 
@@ -76,19 +117,27 @@ impl DatabasePool {
         Ok(rows)
     }
 
-    /// Execute multi-statement SQL content (for SQL files)
+    /// Execute multi-statement SQL content (for SQL files) in a single transaction
     pub async fn execute_sql_content(&self, sql_content: &str) -> Result<(), DatabaseError> {
-        let conn = self.pool.get().await?;
+        let mut conn = self.pool.get().await?;
+
+        // Begin transaction
+        let transaction = conn.transaction().await.map_err(DatabaseError::Query)?;
 
         let statements = Self::parse_sql_statements(sql_content);
 
+        // Execute all statements within the transaction
         for statement in statements {
             if !statement.trim().is_empty() {
-                conn.execute(&statement, &[])
+                transaction
+                    .execute(&statement, &[])
                     .await
                     .map_err(DatabaseError::Query)?;
             }
         }
+
+        // Commit the transaction
+        transaction.commit().await.map_err(DatabaseError::Query)?;
 
         Ok(())
     }
@@ -147,5 +196,37 @@ impl DatabasePool {
         }
 
         statements
+    }
+
+    /// Create a database with the given name using template0 for a clean database
+    pub async fn create_database(&self, database_name: &str) -> Result<(), DatabaseError> {
+        let create_db_sql = format!("CREATE DATABASE {database_name} WITH TEMPLATE template0");
+        self.query(&create_db_sql, &[]).await.map_err(|e| {
+            DatabaseError::Config(format!("Failed to create database '{database_name}': {e}"))
+        })?;
+        Ok(())
+    }
+
+    /// Drop a database with the given name
+    pub async fn drop_database(&self, database_name: &str) -> Result<(), DatabaseError> {
+        let drop_db_sql = format!("DROP DATABASE IF EXISTS {database_name}");
+        self.query(&drop_db_sql, &[]).await.map_err(|e| {
+            DatabaseError::Config(format!("Failed to drop database '{database_name}': {e}"))
+        })?;
+        Ok(())
+    }
+
+    /// Check if a database exists
+    pub async fn database_exists(&self, database_name: &str) -> Result<bool, DatabaseError> {
+        let check_sql = "SELECT 1 FROM pg_database WHERE datname = $1";
+        let rows = self
+            .query(check_sql, &[&database_name])
+            .await
+            .map_err(|e| {
+                DatabaseError::Config(format!(
+                    "Failed to check if database '{database_name}' exists: {e}"
+                ))
+            })?;
+        Ok(!rows.is_empty())
     }
 }

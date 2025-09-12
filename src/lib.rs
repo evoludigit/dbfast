@@ -37,15 +37,29 @@ pub mod database;
 pub mod environment;
 /// Error handling
 pub mod error;
+/// Comprehensive error handling system
+pub mod errors;
+/// Database health monitoring
+pub mod health;
+/// Performance metrics collection
+pub mod metrics;
+/// Comprehensive observability and monitoring infrastructure
+pub mod observability;
 pub mod query;
 /// Remote deployment management
 pub mod remote;
+/// Retry and recovery mechanisms
+pub mod retry;
 /// File scanning and hash calculation
 pub mod scanner;
+/// Security hardening and audit logging
+pub mod security;
 /// SQL repository management for file discovery and loading
 pub mod sql_repository;
 /// Template management functionality
 pub mod template;
+/// Configuration validation system
+pub mod validators;
 
 pub use config::Config;
 pub use connection::Connection;

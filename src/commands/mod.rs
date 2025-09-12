@@ -8,3 +8,9 @@ pub mod seed;
 pub mod status;
 /// Validate environment command functionality
 pub mod validate_env;
+
+/// Remote database management commands
+pub mod remote;
+
+/// Deployment commands with backup integration
+pub mod deploy;

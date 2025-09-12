@@ -53,6 +53,74 @@ pub enum Commands {
         #[arg(long, value_name = "NAME")]
         env: String,
     },
+    /// Remote database management
+    Remote {
+        /// Remote subcommand
+        #[command(subcommand)]
+        command: RemoteCommands,
+    },
+    /// Deploy to remote database
+    Deploy {
+        /// Remote name to deploy to
+        #[arg(value_name = "REMOTE")]
+        remote: String,
+        /// Environment to deploy
+        #[arg(long, value_name = "ENV")]
+        env: Option<String>,
+        /// Skip confirmation prompts
+        #[arg(long)]
+        yes: bool,
+        /// Skip backup before deployment
+        #[arg(long)]
+        skip_backup: bool,
+        /// Dry run - validate only, don't deploy
+        #[arg(long)]
+        dry_run: bool,
+    },
+}
+
+/// Remote database management commands
+#[derive(Subcommand)]
+pub enum RemoteCommands {
+    /// Add a new remote database configuration
+    Add {
+        /// Remote name
+        #[arg(long, value_name = "NAME")]
+        name: String,
+        /// Connection URL (postgresql://user@host:port/database)
+        #[arg(long, value_name = "URL")]
+        url: String,
+        /// Target environment
+        #[arg(long, value_name = "ENV")]
+        env: String,
+        /// Environment variable for password
+        #[arg(long, value_name = "PASSWORD_ENV")]
+        password_env: Option<String>,
+        /// Allow destructive operations
+        #[arg(long)]
+        allow_destructive: bool,
+        /// Skip backup before deployment
+        #[arg(long)]
+        skip_backup: bool,
+    },
+    /// List configured remote databases
+    List {
+        /// Show detailed information
+        #[arg(long)]
+        verbose: bool,
+    },
+    /// Test remote database connection
+    Test {
+        /// Remote name to test
+        #[arg(value_name = "NAME")]
+        name: String,
+    },
+    /// Remove a remote database configuration
+    Remove {
+        /// Remote name to remove
+        #[arg(value_name = "NAME")]
+        name: String,
+    },
 }
 
 impl Cli {
