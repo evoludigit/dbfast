@@ -22,7 +22,7 @@ fn create_test_sql_files(base_dir: &std::path::Path) -> std::io::Result<Vec<Path
     let user_index_file = schema_dir.join("010112_idx_user.sql");
     fs::write(
         &user_index_file,
-        "CREATE INDEX idx_user_name ON tb_user(name);",
+        "CREATE INDEX IF NOT EXISTS idx_user_name ON tb_user(name);",
     )?;
 
     Ok(vec![user_table_file, user_index_file])
@@ -46,7 +46,6 @@ async fn test_template_manager_with_change_detector_creation() {
 }
 
 #[tokio::test]
-#[ignore = "Connection routing issue - connects to postgres instead of template DB"]
 async fn test_create_template_with_change_tracking() {
     let temp_dir = TempDir::new().unwrap();
     create_test_sql_files(temp_dir.path()).unwrap();
@@ -96,7 +95,6 @@ async fn test_create_template_with_change_tracking() {
 }
 
 #[tokio::test]
-#[ignore = "Connection routing issue - connects to postgres instead of template DB"]
 async fn test_template_needs_rebuild_integration() {
     let temp_dir = TempDir::new().unwrap();
     let sql_files = create_test_sql_files(temp_dir.path()).unwrap();
@@ -153,7 +151,6 @@ async fn test_template_needs_rebuild_integration() {
 }
 
 #[tokio::test]
-#[ignore = "Connection routing issue - connects to postgres instead of template DB"]
 async fn test_smart_template_creation() {
     let temp_dir = TempDir::new().unwrap();
     let sql_files = create_test_sql_files(temp_dir.path()).unwrap();

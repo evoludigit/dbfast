@@ -74,6 +74,7 @@ fn create_test_project_with_environments() -> TempDir {
             repo_type: "structured".to_string(),
         },
         environments,
+        remotes: HashMap::new(),
     };
 
     let config_content = toml::to_string(&config).unwrap();
@@ -133,6 +134,7 @@ fn create_unsafe_production_config() -> TempDir {
             repo_type: "structured".to_string(),
         },
         environments,
+        remotes: HashMap::new(),
     };
 
     let config_content = toml::to_string(&config).unwrap();
@@ -178,6 +180,9 @@ fn test_environments_command_lists_configured_environments() {
 fn test_environments_command_shows_different_file_counts() {
     let temp_dir = create_test_project_with_environments();
 
+    // Ensure files are flushed to disk before running command
+    std::thread::sleep(std::time::Duration::from_millis(10));
+
     let mut cmd = Command::cargo_bin("dbfast").unwrap();
     let output = cmd
         .arg("environments")
@@ -185,19 +190,28 @@ fn test_environments_command_shows_different_file_counts() {
         .output()
         .unwrap();
 
-    assert!(output.status.success());
+    assert!(
+        output.status.success(),
+        "Command failed with stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     // Local should have more files than production (includes local seed data)
-    let local_line = stdout.lines().find(|line| line.contains("local")).unwrap();
+    let local_line = stdout
+        .lines()
+        .find(|line| line.starts_with("• local"))
+        .expect("Should find local environment in output");
     let production_line = stdout
         .lines()
-        .find(|line| line.contains("production"))
-        .unwrap();
+        .find(|line| line.starts_with("• production"))
+        .expect("Should find production environment in output");
 
     assert!(
         local_line.contains("files"),
-        "Local environment should show file count"
+        "Local environment should show file count. Line: '{}', Full output: '{}'",
+        local_line,
+        stdout
     );
     assert!(
         production_line.contains("files"),
@@ -423,6 +437,7 @@ fn test_validate_env_command_checks_file_existence() {
             repo_type: "structured".to_string(),
         },
         environments,
+        remotes: HashMap::new(),
     };
 
     let config_content = toml::to_string(&config).unwrap();

@@ -40,6 +40,7 @@ fn create_test_config(temp_dir: &std::path::Path, template_name: &str) -> std::i
             repo_type: "structured".to_string(),
         },
         environments: HashMap::new(),
+        remotes: HashMap::new(),
     };
 
     let config_content = toml::to_string(&config).unwrap();

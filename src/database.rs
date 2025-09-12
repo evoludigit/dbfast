@@ -5,6 +5,7 @@ use bb8_postgres::PostgresConnectionManager;
 use std::env;
 use thiserror::Error;
 use tokio_postgres::{NoTls, Row};
+use tracing::{debug, error, info, warn};
 
 /// Database-related errors
 #[derive(Debug, Error)]
@@ -33,6 +34,11 @@ pub struct DatabasePool {
 impl DatabasePool {
     /// Create a new database connection pool for the default database
     pub async fn new(config: &DatabaseConfig) -> Result<Self, DatabaseError> {
+        info!("Creating database connection pool for default database");
+        debug!(
+            "Database config: host={}:{}, user={}",
+            config.host, config.port, config.user
+        );
         Self::new_for_database(config, "postgres").await
     }
 
@@ -41,27 +47,62 @@ impl DatabasePool {
         config: &DatabaseConfig,
         database_name: &str,
     ) -> Result<Self, DatabaseError> {
+        info!("Creating connection pool for database: {}", database_name);
+
         // Get password from environment variable
         let password = config
             .password_env
             .as_ref()
             .map_or_else(String::new, |password_env| {
-                env::var(password_env).unwrap_or_else(|_| String::new())
+                debug!(
+                    "Reading password from environment variable: {}",
+                    password_env
+                );
+                match env::var(password_env) {
+                    Ok(pwd) => pwd,
+                    Err(_) => {
+                        warn!(
+                            "Environment variable {} not found, using empty password",
+                            password_env
+                        );
+                        String::new()
+                    }
+                }
             });
 
-        // Build connection string
+        // Build connection string (hide password in logs)
         let connection_string = format!(
             "host={} port={} user={} password={} dbname={}",
             config.host, config.port, config.user, password, database_name
         );
 
+        debug!(
+            "Creating connection pool: host={}:{}, user={}, database={}",
+            config.host, config.port, config.user, database_name
+        );
+
         // Create connection manager
         let manager = PostgresConnectionManager::new_from_stringlike(connection_string, NoTls)
-            .map_err(|e| DatabaseError::Config(e.to_string()))?;
+            .map_err(|e| {
+                error!("Failed to create connection manager: {}", e);
+                DatabaseError::Config(e.to_string())
+            })?;
 
         // Create pool
-        let pool = Pool::builder().max_size(10).build(manager).await?;
+        debug!("Building connection pool with max_size=10");
+        let pool = Pool::builder()
+            .max_size(10)
+            .build(manager)
+            .await
+            .map_err(|e| {
+                error!("Failed to build connection pool: {}", e);
+                e
+            })?;
 
+        info!(
+            "Successfully created connection pool for database: {}",
+            database_name
+        );
         Ok(Self { pool })
     }
 

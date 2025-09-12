@@ -51,10 +51,8 @@ impl BackupManager {
             .chars()
             .take(6)
             .collect::<String>();
-        let filename = format!(
-            "{}_{}_{}_{}.sql.gz",
-            remote_config.name, timestamp, nanos, unique_id
-        );
+        let remote_name = remote_config.name.as_deref().unwrap_or("unknown");
+        let filename = format!("{remote_name}_{timestamp}_{nanos}_{unique_id}.sql.gz");
         let file_path = self.backup_dir.join(&filename);
 
         // Try to use real pg_dump if available and URL looks valid, otherwise fallback to mock
@@ -310,6 +308,8 @@ impl BackupManager {
         // Clean remote name for filename
         let clean_remote_name = remote_config
             .name
+            .as_deref()
+            .unwrap_or("unknown")
             .chars()
             .map(|c| {
                 if c.is_alphanumeric() || c == '_' || c == '-' {

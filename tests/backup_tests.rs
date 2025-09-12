@@ -18,7 +18,6 @@ async fn test_backup_creation() {
     let remote_config = RemoteConfig::new(
         "test_remote".to_string(),
         "postgres://postgres:password@localhost:5432/test_db".to_string(),
-        "postgres".to_string(),
         "local".to_string(),
     );
 
@@ -47,7 +46,6 @@ async fn test_backup_restoration() {
     let source_config = RemoteConfig::new(
         "source".to_string(),
         "postgres://postgres:password@localhost:5432/source_db".to_string(),
-        "postgres".to_string(),
         "local".to_string(),
     );
 
@@ -57,7 +55,6 @@ async fn test_backup_restoration() {
     let target_config = RemoteConfig::new(
         "target".to_string(),
         "postgres://postgres:password@localhost:5432/target_db".to_string(),
-        "postgres".to_string(),
         "local".to_string(),
     );
 
@@ -80,7 +77,6 @@ async fn test_backup_list_management() {
     let remote_config = RemoteConfig::new(
         "test_remote".to_string(),
         "postgres://postgres:password@localhost:5432/test_db".to_string(),
-        "postgres".to_string(),
         "local".to_string(),
     );
 
@@ -116,7 +112,6 @@ async fn test_backup_validation() {
     let remote_config = RemoteConfig::new(
         "test_remote".to_string(),
         "postgres://postgres:password@localhost:5432/test_db".to_string(),
-        "postgres".to_string(),
         "local".to_string(),
     );
 
@@ -158,7 +153,6 @@ fn test_backup_file_naming() {
     let remote_config = RemoteConfig::new(
         "staging".to_string(),
         "postgres://postgres:password@localhost:5432/myapp_staging".to_string(),
-        "postgres".to_string(),
         "staging".to_string(),
     );
 
