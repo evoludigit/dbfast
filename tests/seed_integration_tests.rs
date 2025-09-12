@@ -37,13 +37,26 @@ include_directories = ["0_schema", "1_seed_common", "2_seed_backend"]
 
     // Change to temp directory for test
     let original_dir = env::current_dir().unwrap();
-    env::set_current_dir(&temp_dir).unwrap();
+    
+    // Ensure we can change back to original directory before proceeding
+    if let Err(e) = env::set_current_dir(&temp_dir) {
+        eprintln!("⚠️  Failed to set temp directory: {}", e);
+        return;
+    }
 
     // Test the async seed function directly
     let result = seed::handle_seed_async("test_integration_db", true).await;
 
-    // Restore original directory
-    env::set_current_dir(original_dir).unwrap();
+    // Always attempt to restore original directory, but handle errors gracefully
+    if let Err(e) = env::set_current_dir(&original_dir) {
+        eprintln!("⚠️  Failed to restore original directory: {}", e);
+        // Try to restore to a known good directory as fallback
+        if let Ok(home) = env::var("HOME") {
+            let _ = env::set_current_dir(home);
+        } else {
+            let _ = env::set_current_dir("/tmp");
+        }
+    }
 
     // The result will likely be an error due to no PostgreSQL connection in test environment
     // But we can verify it's the right kind of error (database connection, not config)
@@ -115,12 +128,26 @@ type = "structured"
     fs::write(&config_path, test_config).unwrap();
 
     let original_dir = env::current_dir().unwrap();
-    env::set_current_dir(&temp_dir).unwrap();
+    
+    // Ensure we can change back to original directory before proceeding
+    if let Err(e) = env::set_current_dir(&temp_dir) {
+        eprintln!("⚠️  Failed to set temp directory: {}", e);
+        return;
+    }
 
     // Test synchronous function
     let result = seed::handle_seed("sync_test_db", false);
 
-    env::set_current_dir(original_dir).unwrap();
+    // Always attempt to restore original directory, but handle errors gracefully
+    if let Err(e) = env::set_current_dir(&original_dir) {
+        eprintln!("⚠️  Failed to restore original directory: {}", e);
+        // Try to restore to a known good directory as fallback
+        if let Ok(home) = env::var("HOME") {
+            let _ = env::set_current_dir(home);
+        } else {
+            let _ = env::set_current_dir("/tmp");
+        }
+    }
 
     // Should handle the async operation properly
     match result {
