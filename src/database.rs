@@ -76,19 +76,27 @@ impl DatabasePool {
         Ok(rows)
     }
 
-    /// Execute multi-statement SQL content (for SQL files)
+    /// Execute multi-statement SQL content (for SQL files) in a single transaction
     pub async fn execute_sql_content(&self, sql_content: &str) -> Result<(), DatabaseError> {
-        let conn = self.pool.get().await?;
+        let mut conn = self.pool.get().await?;
+
+        // Begin transaction
+        let transaction = conn.transaction().await.map_err(DatabaseError::Query)?;
 
         let statements = Self::parse_sql_statements(sql_content);
 
+        // Execute all statements within the transaction
         for statement in statements {
             if !statement.trim().is_empty() {
-                conn.execute(&statement, &[])
+                transaction
+                    .execute(&statement, &[])
                     .await
                     .map_err(DatabaseError::Query)?;
             }
         }
+
+        // Commit the transaction
+        transaction.commit().await.map_err(DatabaseError::Query)?;
 
         Ok(())
     }
@@ -147,5 +155,37 @@ impl DatabasePool {
         }
 
         statements
+    }
+
+    /// Create a database with the given name using template0 for a clean database
+    pub async fn create_database(&self, database_name: &str) -> Result<(), DatabaseError> {
+        let create_db_sql = format!("CREATE DATABASE {database_name} WITH TEMPLATE template0");
+        self.query(&create_db_sql, &[]).await.map_err(|e| {
+            DatabaseError::Config(format!("Failed to create database '{database_name}': {e}"))
+        })?;
+        Ok(())
+    }
+
+    /// Drop a database with the given name
+    pub async fn drop_database(&self, database_name: &str) -> Result<(), DatabaseError> {
+        let drop_db_sql = format!("DROP DATABASE IF EXISTS {database_name}");
+        self.query(&drop_db_sql, &[]).await.map_err(|e| {
+            DatabaseError::Config(format!("Failed to drop database '{database_name}': {e}"))
+        })?;
+        Ok(())
+    }
+
+    /// Check if a database exists
+    pub async fn database_exists(&self, database_name: &str) -> Result<bool, DatabaseError> {
+        let check_sql = "SELECT 1 FROM pg_database WHERE datname = $1";
+        let rows = self
+            .query(check_sql, &[&database_name])
+            .await
+            .map_err(|e| {
+                DatabaseError::Config(format!(
+                    "Failed to check if database '{database_name}' exists: {e}"
+                ))
+            })?;
+        Ok(!rows.is_empty())
     }
 }

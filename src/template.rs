@@ -86,14 +86,8 @@ impl TemplateManager {
     ) -> TemplateResult<()> {
         let start = Instant::now();
 
-        // Step 1: Create the template database
-        let create_db_sql = format!("CREATE DATABASE {template_name}");
-        self.pool.query(&create_db_sql, &[]).await.map_err(|e| {
-            DatabaseError::Config(format!(
-                "Failed to create template database '{template_name}': {e}"
-            ))
-        })?;
-
+        // Step 1: Create the template database using admin connection
+        self.pool.create_database(template_name).await?;
         println!("📝 Created template database: {template_name}");
 
         // Step 2: Execute SQL files in order
@@ -106,11 +100,13 @@ impl TemplateManager {
                 ))
             })?;
 
+        // Read and concatenate all SQL files
+        let mut concatenated_sql = String::new();
         for (i, sql_file) in sql_files.iter().enumerate() {
             let file_path = sql_file.as_ref();
-            println!("📄 Executing SQL file {}: {}", i + 1, file_path.display());
+            println!("📄 Reading SQL file {}: {}", i + 1, file_path.display());
 
-            // 1. Read the SQL file content
+            // Read the SQL file content
             let sql_content = tokio::fs::read_to_string(file_path).await.map_err(|e| {
                 DatabaseError::Config(format!(
                     "Failed to read SQL file {}: {e}",
@@ -118,17 +114,23 @@ impl TemplateManager {
                 ))
             })?;
 
-            // 2. Execute the SQL commands on the template database
-            template_pool
-                .execute_sql_content(&sql_content)
-                .await
-                .map_err(|e| {
-                    DatabaseError::Config(format!(
-                        "Failed to execute SQL file {}: {e}",
-                        file_path.display()
-                    ))
-                })?;
+            // Add file separator comment and content
+            concatenated_sql.push_str(&format!("\n-- File: {}\n", file_path.display()));
+            concatenated_sql.push_str(&sql_content);
+            concatenated_sql.push('\n');
         }
+
+        // Execute all SQL files in a single transaction
+        println!(
+            "🔄 Executing {} SQL files in a single transaction",
+            sql_files.len()
+        );
+        template_pool
+            .execute_sql_content(&concatenated_sql)
+            .await
+            .map_err(|e| {
+                DatabaseError::Config(format!("Failed to execute concatenated SQL files: {e}"))
+            })?;
 
         let duration = start.elapsed();
         println!(
@@ -148,18 +150,7 @@ impl TemplateManager {
     /// # Returns
     /// `true` if the template database exists, `false` otherwise
     pub async fn template_exists(&self, template_name: &str) -> TemplateResult<bool> {
-        let check_sql = "SELECT 1 FROM pg_database WHERE datname = $1";
-
-        let rows = self
-            .pool
-            .query(check_sql, &[&template_name])
-            .await
-            .map_err(|e| {
-                DatabaseError::Config(format!(
-                    "Failed to check if template '{template_name}' exists: {e}"
-                ))
-            })?;
-        Ok(!rows.is_empty())
+        self.pool.database_exists(template_name).await
     }
 
     /// Drop a template database
@@ -178,13 +169,7 @@ impl TemplateManager {
     /// - `PostgreSQL` permissions are insufficient
     /// - Template is currently in use by other connections
     pub async fn drop_template(&self, template_name: &str) -> TemplateResult<()> {
-        let drop_sql = format!("DROP DATABASE IF EXISTS {template_name}");
-        self.pool.query(&drop_sql, &[]).await.map_err(|e| {
-            DatabaseError::Config(format!(
-                "Failed to drop template database '{template_name}': {e}"
-            ))
-        })?;
-
+        self.pool.drop_database(template_name).await?;
         println!("🗑️  Template dropped: {template_name}");
         Ok(())
     }

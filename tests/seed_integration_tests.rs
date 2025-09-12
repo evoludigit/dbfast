@@ -37,7 +37,7 @@ include_directories = ["0_schema", "1_seed_common", "2_seed_backend"]
 
     // Change to temp directory for test
     let original_dir = env::current_dir().unwrap();
-    
+
     // Ensure we can change back to original directory before proceeding
     if let Err(e) = env::set_current_dir(&temp_dir) {
         eprintln!("⚠️  Failed to set temp directory: {}", e);
@@ -128,7 +128,7 @@ type = "structured"
     fs::write(&config_path, test_config).unwrap();
 
     let original_dir = env::current_dir().unwrap();
-    
+
     // Ensure we can change back to original directory before proceeding
     if let Err(e) = env::set_current_dir(&temp_dir) {
         eprintln!("⚠️  Failed to set temp directory: {}", e);
