@@ -102,7 +102,7 @@ async fn test_backup_list_management() {
     assert_eq!(backups[0].file_path, backup1.file_path);
 
     // Create second backup
-    let backup2 = backup_manager.create_backup(&remote_config).await.unwrap();
+    let _backup2 = backup_manager.create_backup(&remote_config).await.unwrap();
     
     // List should now contain two backups
     let backups = backup_manager.list_backups().await.unwrap();
