@@ -1,4 +1,4 @@
-# DBFast v0.2.1 - Lightning-Fast PostgreSQL Database Seeding
+# DBFast v0.3.0 - Lightning-Fast PostgreSQL Database Seeding
 
 [![Build Status](https://img.shields.io/badge/tests-40%20passing-green)](https://github.com/evoludigit/dbfast/tree/main/tests)
 [![Rust Version](https://img.shields.io/badge/rust-1.75%2B-orange)](https://www.rust-lang.org/)
@@ -28,6 +28,25 @@ cd dbfast && cargo build --release
 ./target/release/dbfast status --verbose
 ```
 
+## 🆕 What's New in v0.3.0
+
+**Hybrid SQL Execution Strategy** - The major new feature that solves complex SQL execution challenges:
+
+- **🎯 Smart Detection**: Automatically detects single vs multi-statement SQL content
+- **⚡ Optimal Performance**: Uses fast prepared statements (~1-5ms) for single statements
+- **🔄 Complex SQL Support**: Falls back to psql execution (~50-100ms) for multi-statement content
+- **📄 Concatenated Files**: Execute SQL files with multiple CREATE, INSERT, FUNCTION, COMMENT, and GRANT statements
+- **🔧 Zero Breaking Changes**: Existing code continues to work unchanged
+- **🛡️ Production Ready**: Comprehensive error handling and execution path logging
+
+**Solved Problems:**
+- ✅ "cannot insert multiple commands into a prepared statement" error
+- ✅ PostgreSQL function creation with metadata
+- ✅ Complex concatenated SQL file execution
+- ✅ Mixed statement types in single files
+
+**Requirements:** psql must be installed and accessible for multi-statement fallback.
+
 ## 🎯 Why DBFast?
 
 **Before DBFast:**
@@ -48,6 +67,8 @@ cd dbfast && cargo build --release
 - **Intelligent Change Detection**: xxHash-based rebuilding only when SQL files change
 - **Environment-Aware Deployments**: Filter SQL files based on environment configurations
 - **Remote Database Support**: Deploy templates to remote PostgreSQL instances with safety features
+- **Hybrid SQL Execution** ⭐ *New in v0.3.0*: Smart execution strategy that automatically chooses between prepared statements (~1-5ms) and psql fallback (~50-100ms) for complex multi-statement SQL
+- **Multi-Statement SQL Support** ⭐ *New in v0.3.0*: Execute concatenated SQL files with PostgreSQL functions, comments, and grants seamlessly
 - **Backup Integration**: Automatic backup before destructive operations
 - **Production-Ready**: Connection pooling, retry logic, and comprehensive error handling
 
