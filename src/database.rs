@@ -182,6 +182,17 @@ impl DatabasePool {
         Ok(rows)
     }
 
+    /// Execute a query that cannot run in a transaction (like CREATE/DROP DATABASE)
+    pub async fn execute_non_transactional(
+        &self,
+        query: &str,
+        params: &[&(dyn tokio_postgres::types::ToSql + Sync)],
+    ) -> Result<(), DatabaseError> {
+        let conn = self.pool.get().await?;
+        conn.execute(query, params).await?;
+        Ok(())
+    }
+
     /// Execute multi-statement SQL content (for SQL files) in a single transaction
     pub async fn execute_sql_content(&self, sql_content: &str) -> Result<(), DatabaseError> {
         // Default to advanced parsing for backward compatibility
@@ -444,18 +455,22 @@ impl DatabasePool {
     /// Create a database with the given name using template0 for a clean database
     pub async fn create_database(&self, database_name: &str) -> Result<(), DatabaseError> {
         let create_db_sql = format!("CREATE DATABASE {database_name} WITH TEMPLATE template0");
-        self.query(&create_db_sql, &[]).await.map_err(|e| {
-            DatabaseError::Config(format!("Failed to create database '{database_name}': {e}"))
-        })?;
+        self.execute_non_transactional(&create_db_sql, &[])
+            .await
+            .map_err(|e| {
+                DatabaseError::Config(format!("Failed to create database '{database_name}': {e}"))
+            })?;
         Ok(())
     }
 
     /// Drop a database with the given name
     pub async fn drop_database(&self, database_name: &str) -> Result<(), DatabaseError> {
         let drop_db_sql = format!("DROP DATABASE IF EXISTS {database_name}");
-        self.query(&drop_db_sql, &[]).await.map_err(|e| {
-            DatabaseError::Config(format!("Failed to drop database '{database_name}': {e}"))
-        })?;
+        self.execute_non_transactional(&drop_db_sql, &[])
+            .await
+            .map_err(|e| {
+                DatabaseError::Config(format!("Failed to drop database '{database_name}': {e}"))
+            })?;
         Ok(())
     }
 

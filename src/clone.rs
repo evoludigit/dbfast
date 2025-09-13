@@ -93,7 +93,7 @@ impl CloneManager {
             Self::escape_identifier(template_name)
         );
 
-        let result = self.pool.execute_sql_content(&query).await;
+        let result = self.pool.execute_non_transactional(&query, &[]).await;
 
         // Check for timeout
         if start.elapsed() > self.config.clone_timeout {
@@ -135,7 +135,7 @@ impl CloneManager {
         );
 
         self.pool
-            .execute_sql_content(&query)
+            .execute_non_transactional(&query, &[])
             .await
             .map_err(|e| CloneError::DatabaseError {
                 details: e.to_string(),
