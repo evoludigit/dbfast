@@ -155,9 +155,9 @@ pub fn handle_remote_list(verbose: bool) -> Result<()> {
 
             if let Some(password_env) = &remote.password_env {
                 let has_password = std::env::var(password_env).is_ok();
+                // Don't log actual environment variable name for security
                 println!(
-                    "   Password:    {} ({})",
-                    password_env,
+                    "   Password:    [REDACTED ENV VAR] ({})",
                     if has_password {
                         "✅ set"
                     } else {
