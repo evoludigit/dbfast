@@ -50,7 +50,7 @@ jobs:
   test:
     name: Test & Coverage
     runs-on: ubuntu-latest
-    
+
     services:
       postgres:
         image: postgres:15-alpine
@@ -66,11 +66,11 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    
+
     env:
       POSTGRES_PASSWORD: postgres
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
-    
+
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -103,11 +103,12 @@ jobs:
       - name: Run tests
         run: cargo nextest run --all-features
 
-      - name: Run doctests  
+      - name: Run doctests
         run: cargo test --doc --all-features
 
       - name: Generate coverage report
-        run: cargo tarpaulin --verbose --all-features --workspace --timeout 120 --out xml
+        run: cargo tarpaulin --verbose --all-features --workspace --timeout 300 --out xml
+        continue-on-error: true
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5

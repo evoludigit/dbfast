@@ -19,7 +19,7 @@ pub fn handle_seed(output_name: &str, with_seeds: bool) -> Result<()> {
 }
 
 /// Handle the seed command asynchronously with real database cloning
-#[allow(clippy::too_many_lines)]
+#[allow(clippy::too_many_lines)] // Main async function with complex workflow
 pub async fn handle_seed_async(output_name: &str, with_seeds: bool) -> Result<()> {
     let start = Instant::now();
 

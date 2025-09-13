@@ -1,75 +1,64 @@
-# DBFast ⚡ - Lightning-Fast PostgreSQL Database Seeding
+# DBFast - PostgreSQL Database Cloning Tool
 
-*Transform database fixtures from a 60-second bottleneck into a 100ms delight*
+[![Build Status](https://img.shields.io/badge/tests-40%20passing-green)](https://github.com/evoludigit/dbfast/tree/main/tests)
+[![Rust Version](https://img.shields.io/badge/rust-1.75%2B-orange)](https://www.rust-lang.org/)
 
-## What is DBFast?
+A PostgreSQL database template management and cloning tool written in Rust.
 
-DBFast is a PostgreSQL-native database seeding tool that creates "template" databases once, then clones them instantly using `CREATE DATABASE WITH TEMPLATE`. Perfect for fast test setup and environment deployment.
+## What DBFast Actually Does
 
-**Core Magic**: Build once, clone infinitely in ~100ms
+DBFast is a command-line tool that helps manage PostgreSQL database templates and create database clones using PostgreSQL's native `CREATE DATABASE WITH TEMPLATE` functionality.
 
-## Quick Start
+### Core Features
 
-```bash
-# 1. Initialize from your existing database repository
-dbfast init --repo-dir ./db --template-name myapp_template
+- **Database Template Management**: Initialize and manage PostgreSQL database templates
+- **Fast Database Cloning**: Clone databases using PostgreSQL's native template system
+- **Environment-Aware Deployments**: Filter SQL files based on environment configurations
+- **Remote Database Support**: Deploy templates to remote PostgreSQL instances
+- **Change Detection**: Track file changes to determine when template rebuilds are needed
+- **Basic Health Monitoring**: Monitor database connection health and basic metrics
 
-# 2. Get a seeded test database instantly
-dbfast seed --output test_db_$(date +%s)
+## Architecture
 
-# 3. Deploy to remote environments safely
-dbfast deploy --remote staging --env staging --confirm
 ```
-
-## Key Features
-
-### 🚀 **Blazing Fast**
-- **~100ms database clones** using PostgreSQL's native templating
-- **Smart change detection** - only rebuilds when SQL files change
-- **PostgreSQL 17 ZSTD compression** for faster transfers
-
-### 🎯 **Environment-Aware**
-Deploy different files to different environments:
-```toml
-[environments.local]
-include_directories = ["0_schema", "1_seed_common", "2_seed_backend"]
-
-[environments.production]  
-include_directories = ["0_schema", "6_migration"]
-exclude_directories = ["1_seed_common", "2_seed_backend"]
-```
-
-### 🔒 **Production-Safe**
-- **Atomic deployments** with automatic backups
-- **Environment-specific filtering** prevents accidents
-- **Rollback on failure** - your data stays safe
-
-## Repository Structure
-
-Works with structured database repositories:
-```
-db/
-├── 0_schema/          # Tables, views, functions
-├── 1_seed_common/     # Essential seed data  
-├── 2_seed_backend/    # Backend-specific data
-├── 6_migration/       # Production migrations
-└── 99_finalize/       # Cleanup, grants
+┌─────────────────────────────────────────┐
+│ DBFast CLI                              │
+│ - init, seed, deploy, status commands   │
+│ - Configuration management              │
+│ - Environment filtering                 │
+└─────────────────────────────────────────┘
+                   ↓
+┌─────────────────────────────────────────┐
+│ Core Components                         │
+│ - Template Manager                      │
+│ - Database Clone Manager                │
+│ - SQL Repository Scanner                │
+│ - Change Detection                      │
+└─────────────────────────────────────────┘
+                   ↓
+┌─────────────────────────────────────────┐
+│ PostgreSQL Database                     │
+│ - Template databases                    │
+│ - Native template cloning              │
+└─────────────────────────────────────────┘
 ```
 
 ## Installation
 
+### From Source
+
 ```bash
-# Build from source
 git clone https://github.com/evoludigit/dbfast
 cd dbfast
 cargo build --release
 
-# Binary will be at target/release/dbfast
+# Binary available at target/release/dbfast
 ```
 
 ## Configuration
 
-Create `dbfast.toml`:
+Create a `dbfast.toml` configuration file:
+
 ```toml
 [database]
 host = "localhost"
@@ -78,77 +67,147 @@ user = "postgres"
 password_env = "POSTGRES_PASSWORD"
 template_name = "myapp_template"
 
-[repository]
-path = "./db"
-type = "structured"
-
+# Environment definitions
 [environments.local]
 include_directories = ["0_schema", "1_seed_common", "2_seed_backend"]
 
 [environments.production]
 include_directories = ["0_schema", "6_migration"]
 exclude_directories = ["1_seed_common", "2_seed_backend"]
+
+# Remote configurations
+[remotes.production]
+url = "postgres://prod-server:5432/myapp"
+environment = "production"
 ```
 
-## Commands
+## Usage
+
+### Initialize Template
 
 ```bash
-# Template management
 dbfast init --repo-dir ./db --template-name myapp_template
-dbfast rebuild --force
+```
+
+### Create Database Clone
+
+```bash
+dbfast seed --output test_db_1
+dbfast seed --output test_db_2 --with-seeds
+```
+
+### Check Status
+
+```bash
 dbfast status
-
-# Database seeding
-dbfast seed --output test_db --with-seeds
-dbfast seed --output test_schema  # Schema only
-
-# Remote deployment  
-dbfast remote add --name staging --url postgres://staging-server/db
-dbfast deploy --remote staging --env staging --confirm
-
-# Repository management
-dbfast repo add --name shared --path ~/shared_db
-dbfast repo sync --name myapp
+dbfast status --verbose
 ```
 
-## Real-World Impact
+### Environment Management
 
-### Before DBFast 😢
-```python
-@pytest.fixture(scope="session")  
-def database():
-    # 🐌 Takes 30-60 seconds
-    # 💥 Often hangs mysteriously  
-    setup_complex_database_fixture()
+```bash
+dbfast environments
+dbfast validate-env production
 ```
 
-### After DBFast 🎉
-```python  
-@pytest.fixture(scope="session")
-def database():
-    # ⚡ Takes <500ms, always works
-    subprocess.run(["dbfast", "seed", "--output", "test_session"])
+### Remote Deployment
+
+```bash
+# Add remote
+dbfast remote add --name production --url $DATABASE_URL --env production
+
+# List remotes
+dbfast remote list
+
+# Test connection
+dbfast remote test production
+
+# Deploy to remote
+dbfast deploy --remote production --env production --yes
 ```
 
-## Performance
+## Project Structure
 
-- **File scanning**: ~5ms for 1000+ SQL files
-- **Template detection**: ~0.5ms (cache hit)
-- **Database clone**: **~100ms** 
-- **Remote deployment**: ~2-3min with ZSTD compression
+```
+your-project/
+├── db/                          # SQL repository
+│   ├── 0_schema/               # Schema files
+│   ├── 1_seed_common/          # Common seed data
+│   ├── 2_seed_backend/         # Backend-specific seeds
+│   └── 6_migration/            # Migrations
+├── dbfast.toml                 # Configuration
+└── target/release/dbfast       # Binary
+```
 
-## Safety Features
+## Testing
 
-- **Environment-specific rules** prevent production accidents
-- **Automatic backups** before destructive operations  
-- **Atomic deployments** via single transactions
-- **Validation framework** ensures deployments work
+Run the test suite:
 
-## Author
+```bash
+cargo test
+```
 
-**Lionel Hamayon**  
-Email: lionel.hamayon@evolution-digitale.fr
+**Test Coverage:**
+
+- 40 unit and integration tests passing
+- Error handling system tests
+- Health monitoring data structure tests
+- Metrics collection framework tests
+- Retry/circuit breaker pattern tests
+- Basic database cloning tests
+- Configuration management tests
+
+## Technical Details
+
+### Dependencies
+
+- **tokio**: Async runtime
+- **tokio-postgres**: PostgreSQL driver
+- **bb8/bb8-postgres**: Connection pooling
+- **clap**: CLI argument parsing
+- **serde/toml**: Configuration serialization
+- **walkdir/globset**: File system operations
+- **xxhash-rust**: File change detection
+
+### Performance
+
+- Database clones use PostgreSQL's native `CREATE DATABASE WITH TEMPLATE` command
+- Connection pooling for database operations
+- File change detection using xxHash for incremental updates
+- Async/await throughout for non-blocking operations
+
+### Code Quality
+
+- ~9,000 lines of Rust code
+- Comprehensive error handling with structured error types
+- CLI interface with proper argument validation
+- Configuration validation and environment filtering
+- Modular architecture with separation of concerns
+
+## Limitations
+
+- Requires PostgreSQL (uses PostgreSQL-specific template functionality)
+- No built-in security features beyond PostgreSQL's native security
+- No web interface - CLI only
+- No real-time monitoring beyond basic health checks
+- Configuration changes require restart
+
+## Contributing
+
+```bash
+# Setup development environment
+cargo build
+cargo test
+cargo clippy
+cargo fmt --check
+```
 
 ## License
 
-MIT License - see LICENSE file for details.
+MIT License - see [LICENSE](LICENSE) file for details.
+
+## Author
+
+**Lionel Hamayon**
+Email: <lionel.hamayon@evolution-digitale.fr>
+GitHub: [@evoludigit](https://github.com/evoludigit)

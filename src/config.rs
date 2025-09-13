@@ -1,3 +1,4 @@
+use crate::remote::RemoteConfig;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -26,6 +27,9 @@ pub struct Config {
     /// Environment-specific configurations
     #[serde(default)]
     pub environments: HashMap<String, Environment>,
+    /// Remote database configurations
+    #[serde(default)]
+    pub remotes: HashMap<String, RemoteConfig>,
 }
 
 /// Database connection configuration
@@ -104,6 +108,7 @@ impl Config {
                 repo_type: "structured".to_string(),
             },
             environments,
+            remotes: HashMap::new(),
         }
     }
 

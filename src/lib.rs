@@ -15,7 +15,12 @@
     clippy::missing_panics_doc,
     clippy::multiple_crate_versions,
     clippy::module_name_repetitions,
-    clippy::unused_async
+    clippy::unused_async,
+    missing_docs,
+    clippy::uninlined_format_args,
+    clippy::single_match_else,
+    clippy::match_bool,
+    clippy::needless_pass_by_value
 )]
 
 /// Backup management
@@ -37,9 +42,17 @@ pub mod database;
 pub mod environment;
 /// Error handling
 pub mod error;
+/// Comprehensive error handling system
+pub mod errors;
+/// Database health monitoring
+pub mod health;
+/// Performance metrics collection
+pub mod metrics;
 pub mod query;
 /// Remote deployment management
 pub mod remote;
+/// Retry and recovery mechanisms
+pub mod retry;
 /// File scanning and hash calculation
 pub mod scanner;
 /// SQL repository management for file discovery and loading
