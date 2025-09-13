@@ -1,4 +1,4 @@
-# DBFast v0.1.0 - Lightning-Fast PostgreSQL Database Seeding
+# DBFast v0.2.1 - Lightning-Fast PostgreSQL Database Seeding
 
 [![Build Status](https://img.shields.io/badge/tests-40%20passing-green)](https://github.com/evoludigit/dbfast/tree/main/tests)
 [![Rust Version](https://img.shields.io/badge/rust-1.75%2B-orange)](https://www.rust-lang.org/)
