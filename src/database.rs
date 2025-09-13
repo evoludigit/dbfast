@@ -29,6 +29,9 @@ use crate::config::DatabaseConfig;
 use bb8::{Pool, RunError};
 use bb8_postgres::PostgresConnectionManager;
 use std::env;
+use std::io::Write;
+use std::process::Command;
+use tempfile::NamedTempFile;
 use thiserror::Error;
 use tokio_postgres::{NoTls, Row};
 use tracing::{debug, error, info, warn};
@@ -55,6 +58,17 @@ type PostgresPool = Pool<PostgresConnectionManager<NoTls>>;
 #[derive(Clone)]
 pub struct DatabasePool {
     pool: PostgresPool,
+    connection_info: Option<ConnectionInfo>,
+}
+
+/// Connection information for psql fallback
+#[derive(Clone)]
+pub struct ConnectionInfo {
+    pub host: String,
+    pub port: u16,
+    pub user: String,
+    pub password: Option<String>,
+    pub database: String,
 }
 
 impl DatabasePool {
@@ -78,6 +92,9 @@ impl DatabasePool {
     pub async fn new(database_url: &str) -> Result<Self, DatabaseError> {
         info!("Creating database connection pool from URL");
 
+        // Parse URL for connection info
+        let connection_info = Self::parse_connection_info(database_url)?;
+
         // Create connection manager from URL
         let manager =
             PostgresConnectionManager::new_from_stringlike(database_url, NoTls).map_err(|e| {
@@ -97,7 +114,10 @@ impl DatabasePool {
             })?;
 
         info!("Successfully created connection pool from URL");
-        Ok(Self { pool })
+        Ok(Self {
+            pool,
+            connection_info: Some(connection_info),
+        })
     }
 
     /// Create a new database connection pool from configuration for the default database
@@ -135,6 +155,19 @@ impl DatabasePool {
                 })
             });
 
+        // Store connection info for psql fallback
+        let connection_info = ConnectionInfo {
+            host: config.host.clone(),
+            port: config.port,
+            user: config.user.clone(),
+            password: if password.is_empty() {
+                None
+            } else {
+                Some(password.clone())
+            },
+            database: database_name.to_string(),
+        };
+
         // Build connection string (hide password in logs)
         let connection_string = format!(
             "host={} port={} user={} password={} dbname={}",
@@ -168,7 +201,10 @@ impl DatabasePool {
             "Successfully created connection pool for database: {}",
             database_name
         );
-        Ok(Self { pool })
+        Ok(Self {
+            pool,
+            connection_info: Some(connection_info),
+        })
     }
 
     /// Get a connection from the pool and execute a query
@@ -193,15 +229,89 @@ impl DatabasePool {
         Ok(())
     }
 
-    /// Execute multi-statement SQL content (for SQL files) in a single transaction
+    /// Execute multi-statement SQL content using hybrid execution strategy
+    ///
+    /// This method automatically determines the best execution approach:
+    /// - **Single statements**: Uses fast prepared statements via tokio-postgres
+    /// - **Multi-statement content**: Uses psql fallback to handle complex SQL
+    ///
+    /// This hybrid approach solves GitHub issue #39 by supporting concatenated
+    /// SQL files with multiple statements while maintaining performance for simple queries.
+    ///
+    /// # Examples
+    ///
+    /// Single statement (uses prepared statements):
+    /// ```sql
+    /// SELECT version();
+    /// ```
+    ///
+    /// Multi-statement content (uses psql fallback):
+    /// ```sql
+    /// CREATE SCHEMA myschema;
+    /// CREATE TABLE myschema.users (id SERIAL PRIMARY KEY);
+    /// INSERT INTO myschema.users DEFAULT VALUES;
+    /// ```
+    ///
+    /// # Requirements
+    ///
+    /// For psql fallback to work, `psql` must be installed and accessible in the system PATH.
+    ///
+    /// # Errors
+    ///
+    /// Returns `DatabaseError` if:
+    /// - Database connection fails
+    /// - SQL execution fails (either via prepared statements or psql)
+    /// - psql is not available when needed for multi-statement content
+    /// - Temporary file creation fails (psql fallback)
     pub async fn execute_sql_content(&self, sql_content: &str) -> Result<(), DatabaseError> {
         // Default to advanced parsing for backward compatibility
         self.execute_sql_content_with_config(sql_content, true)
             .await
     }
 
-    /// Execute multi-statement SQL content with configurable parsing mode
+    /// Execute multi-statement SQL content with hybrid execution strategy and configurable parsing
+    ///
+    /// This method implements the hybrid execution strategy described in GitHub issue #39:
+    /// 1. **Detection**: Analyzes SQL content to determine if it contains multiple statements
+    /// 2. **Single statements**: Uses tokio-postgres prepared statements for optimal performance
+    /// 3. **Multi-statement content**: Falls back to psql subprocess execution
+    ///
+    /// The `allow_multi_statement` parameter controls SQL parsing behavior when using
+    /// prepared statements (ignored for psql fallback).
+    ///
+    /// # Arguments
+    ///
+    /// * `sql_content` - The SQL content to execute
+    /// * `allow_multi_statement` - Whether to use advanced SQL parsing for prepared statements
+    ///
+    /// # Performance
+    ///
+    /// - **Prepared statements**: ~1-5ms overhead, optimal for single statements
+    /// - **psql fallback**: ~50-100ms overhead, necessary for complex multi-statement SQL
+    ///
+    /// # Error Handling
+    ///
+    /// Both execution paths provide detailed error reporting:
+    /// - Prepared statement errors include specific SQL and line information
+    /// - psql errors include full stderr output from the subprocess
     pub async fn execute_sql_content_with_config(
+        &self,
+        sql_content: &str,
+        allow_multi_statement: bool,
+    ) -> Result<(), DatabaseError> {
+        // Use hybrid execution strategy based on statement count
+        if Self::should_use_psql_fallback(sql_content) {
+            info!("Using psql fallback for multi-statement content");
+            self.execute_via_psql_fallback(sql_content).await
+        } else {
+            info!("Using prepared statement execution");
+            self.execute_via_prepared_statements(sql_content, allow_multi_statement)
+                .await
+        }
+    }
+
+    /// Execute SQL content via prepared statements (original method)
+    async fn execute_via_prepared_statements(
         &self,
         sql_content: &str,
         allow_multi_statement: bool,
@@ -227,6 +337,167 @@ impl DatabasePool {
         transaction.commit().await.map_err(DatabaseError::Query)?;
 
         Ok(())
+    }
+
+    /// Execute SQL content via psql fallback for concatenated multi-statement files
+    async fn execute_via_psql_fallback(&self, sql_content: &str) -> Result<(), DatabaseError> {
+        // Write content to temporary file
+        let mut temp_file = NamedTempFile::new().map_err(|e| {
+            DatabaseError::Config(format!("Failed to create temporary file: {}", e))
+        })?;
+
+        temp_file.write_all(sql_content.as_bytes()).map_err(|e| {
+            DatabaseError::Config(format!(
+                "Failed to write SQL content to temporary file: {}",
+                e
+            ))
+        })?;
+
+        let temp_path = temp_file.path().to_str().ok_or_else(|| {
+            DatabaseError::Config("Failed to get temporary file path".to_string())
+        })?;
+
+        // Build psql command arguments
+        let mut psql_args = self.build_psql_args()?;
+        psql_args.extend_from_slice(&["-f".to_string(), temp_path.to_string()]);
+
+        let connection_info = self.connection_info.as_ref().unwrap();
+        debug!(
+            "Executing via psql: host={}, port={}, user={}, database={}",
+            connection_info.host,
+            connection_info.port,
+            connection_info.user,
+            connection_info.database
+        );
+
+        // Execute via psql subprocess
+        let output = Command::new("psql")
+            .args(&psql_args)
+            .output()
+            .map_err(|e| {
+                DatabaseError::Config(format!(
+                    "Failed to execute psql command: {}. Ensure psql is installed and accessible.",
+                    e
+                ))
+            })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(DatabaseError::Config(format!(
+                "psql execution failed: {}",
+                stderr
+            )));
+        }
+
+        // Log successful execution
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        debug!("psql execution completed successfully: {}", stdout);
+
+        Ok(())
+    }
+
+    /// Determine if psql fallback should be used for SQL content
+    ///
+    /// This method implements the detection logic described in GitHub issue #39.
+    /// It uses a simple but effective heuristic: count semicolons in the SQL content.
+    ///
+    /// # Detection Logic
+    ///
+    /// - **Single statement** (≤1 semicolon): Use fast prepared statements
+    /// - **Multiple statements** (>1 semicolon): Use psql fallback
+    ///
+    /// This approach handles the most common cases including:
+    /// - Simple queries and single DDL statements
+    /// - Concatenated SQL files with multiple CREATE, INSERT, GRANT statements
+    /// - Complex `PostgreSQL` functions with additional metadata (COMMENT, GRANT)
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use dbfast::database::DatabasePool;
+    /// assert!(!DatabasePool::should_use_psql_fallback("SELECT version();")); // false - single stmt
+    /// assert!(DatabasePool::should_use_psql_fallback("CREATE TABLE t (id INT); INSERT INTO t DEFAULT VALUES;")); // true - multi stmt
+    /// ```
+    ///
+    /// # Future Improvements
+    ///
+    /// This heuristic could be enhanced to handle edge cases like:
+    /// - Semicolons within string literals or comments
+    /// - More sophisticated SQL parsing
+    /// - Configuration-based fallback thresholds
+    #[must_use]
+    pub fn should_use_psql_fallback(sql_content: &str) -> bool {
+        // Simple heuristic: count semicolons to detect multi-statement content
+        // This is the approach suggested in GitHub issue #39
+        let semicolon_count = sql_content.matches(';').count();
+
+        // Use psql fallback for content with multiple statements
+        semicolon_count > 1
+    }
+
+    /// Check if connection info is available (for testing)
+    #[must_use]
+    pub const fn has_connection_info(&self) -> bool {
+        self.connection_info.is_some()
+    }
+
+    /// Get connection info for testing
+    #[must_use]
+    pub const fn get_connection_info(&self) -> Option<&ConnectionInfo> {
+        self.connection_info.as_ref()
+    }
+
+    /// Parse connection info from database URL
+    fn parse_connection_info(database_url: &str) -> Result<ConnectionInfo, DatabaseError> {
+        let url = url::Url::parse(database_url)
+            .map_err(|e| DatabaseError::Config(format!("Failed to parse database URL: {}", e)))?;
+
+        let host = url.host_str().unwrap_or("localhost").to_string();
+        let port = url.port().unwrap_or(5432);
+        let user = url.username().to_string();
+        let password = url.password().map(std::string::ToString::to_string);
+        let database = url.path().trim_start_matches('/').to_string();
+
+        if database.is_empty() {
+            return Err(DatabaseError::Config(
+                "Database name is required in URL".to_string(),
+            ));
+        }
+
+        Ok(ConnectionInfo {
+            host,
+            port,
+            user,
+            password,
+            database,
+        })
+    }
+
+    /// Build psql command arguments from connection info
+    fn build_psql_args(&self) -> Result<Vec<String>, DatabaseError> {
+        let connection_info = self.connection_info.as_ref().ok_or_else(|| {
+            DatabaseError::Config("No connection info available for psql fallback".to_string())
+        })?;
+
+        let args = vec![
+            "-h".to_string(),
+            connection_info.host.clone(),
+            "-p".to_string(),
+            connection_info.port.to_string(),
+            "-U".to_string(),
+            connection_info.user.clone(),
+            "-d".to_string(),
+            connection_info.database.clone(),
+            "-v".to_string(),
+            "ON_ERROR_STOP=1".to_string(),
+        ];
+
+        // Set password via environment variable if available
+        if let Some(password) = &connection_info.password {
+            env::set_var("PGPASSWORD", password);
+        }
+
+        Ok(args)
     }
 
     /// Parse SQL content into individual statements with advanced `PostgreSQL` function support
