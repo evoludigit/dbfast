@@ -1,113 +1,63 @@
-# DBFast ⚡ - Enterprise-Grade PostgreSQL Database Management
+# DBFast - PostgreSQL Database Cloning Tool
 
-[![GitHub License](https://img.shields.io/github/license/evoludigit/dbfast)](https://github.com/evoludigit/dbfast/blob/main/LICENSE)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/evoludigit/dbfast/ci.yml?branch=main)](https://github.com/evoludigit/dbfast/actions)
+[![Build Status](https://img.shields.io/badge/tests-40%20passing-green)](https://github.com/evoludigit/dbfast/tree/main/tests)
 [![Rust Version](https://img.shields.io/badge/rust-1.75%2B-orange)](https://www.rust-lang.org/)
-[![Enterprise Ready](https://img.shields.io/badge/enterprise-ready-brightgreen)](https://github.com/evoludigit/dbfast/blob/main/ENTERPRISE_REPORT.md)
-[![Security Hardened](https://img.shields.io/badge/security-hardened-blue)](https://github.com/evoludigit/dbfast/blob/main/src/security.rs)
-[![Code Coverage](https://img.shields.io/badge/coverage-95%2B%25-brightgreen)](https://github.com/evoludigit/dbfast/tree/main/tests)
 
-*Transform database operations from a 60-second bottleneck into a 100ms enterprise-grade solution with comprehensive monitoring, security, and observability.*
+A PostgreSQL database template management and cloning tool written in Rust.
 
-## 🏢 Enterprise-Ready Database Management
+## What DBFast Actually Does
 
-DBFast is a **production-grade PostgreSQL management tool** that combines lightning-fast database seeding with enterprise-level reliability, security, and observability. Built for teams that need both speed and industrial-strength capabilities.
+DBFast is a command-line tool that helps manage PostgreSQL database templates and create database clones using PostgreSQL's native `CREATE DATABASE WITH TEMPLATE` functionality.
 
-**Core Innovation**: Template once, clone infinitely with enterprise monitoring and security
+### Core Features
 
----
+- **Database Template Management**: Initialize and manage PostgreSQL database templates
+- **Fast Database Cloning**: Clone databases using PostgreSQL's native template system
+- **Environment-Aware Deployments**: Filter SQL files based on environment configurations
+- **Remote Database Support**: Deploy templates to remote PostgreSQL instances
+- **Change Detection**: Track file changes to determine when template rebuilds are needed
+- **Basic Health Monitoring**: Monitor database connection health and basic metrics
 
-## ✨ Enterprise Features
+## Architecture
 
-### 🚀 **Performance & Reliability**
-- **~100ms database clones** using PostgreSQL's native templating
-- **Circuit breaker protection** against cascading failures
-- **Intelligent retry mechanisms** with exponential backoff
-- **Real-time performance metrics** with percentile tracking
-- **Connection pool health monitoring** with automatic recovery
+```
+┌─────────────────────────────────────────┐
+│ DBFast CLI                              │
+│ - init, seed, deploy, status commands   │
+│ - Configuration management              │
+│ - Environment filtering                 │
+└─────────────────────────────────────────┘
+                   ↓
+┌─────────────────────────────────────────┐
+│ Core Components                         │
+│ - Template Manager                      │
+│ - Database Clone Manager                │
+│ - SQL Repository Scanner                │
+│ - Change Detection                      │
+└─────────────────────────────────────────┘
+                   ↓
+┌─────────────────────────────────────────┐
+│ PostgreSQL Database                     │
+│ - Template databases                    │
+│ - Native template cloning              │
+└─────────────────────────────────────────┘
+```
 
-### 🔒 **Security & Compliance**
-- **Multi-layered security** with SQL injection prevention
-- **Rate limiting** and DoS protection
-- **Authentication & session management** with lockout protection
-- **Data encryption** for sensitive information
-- **Comprehensive audit logging** for compliance requirements
+## Installation
 
-### 📊 **Observability & Monitoring**
-- **Distributed tracing** with correlation ID tracking
-- **Structured logging** with JSON output
-- **Real-time metrics export** to external monitoring systems
-- **Health status monitoring** (Healthy → Critical)
-- **Security threat detection** with risk assessment
-
-### ⚙️ **Operational Excellence**
-- **Configuration validation** with security vulnerability detection
-- **Environment-aware deployments** with safety confirmations
-- **Automatic backups** before destructive operations
-- **Rollback capabilities** for safe deployments
-- **Production-safe operations** with comprehensive validation
-
----
-
-## 📈 Quality Metrics
-
-[![Enterprise Score](https://img.shields.io/badge/enterprise%20score-97.5%2F100-brightgreen)](https://github.com/evoludigit/dbfast/blob/main/ENTERPRISE_REPORT.md)
-[![Test Coverage](https://img.shields.io/badge/tests-80%2B%20passing-brightgreen)](https://github.com/evoludigit/dbfast/tree/main/tests)
-[![Security Tests](https://img.shields.io/badge/security%20tests-passing-blue)](https://github.com/evoludigit/dbfast/blob/main/tests/security_tests.rs)
-[![Performance Tests](https://img.shields.io/badge/performance-sub%20ms-green)](https://github.com/evoludigit/dbfast/blob/main/benches/)
-
-- **4,821+ lines** of enterprise-grade code
-- **80+ comprehensive test cases** covering all scenarios
-- **7 major enterprise modules** (error handling, security, monitoring, etc.)
-- **Multi-layered security** with threat detection
-- **Sub-millisecond overhead** for monitoring features
-
----
-
-## 🚀 Quick Start
+### From Source
 
 ```bash
-# 1. Initialize with enterprise features enabled
-dbfast init --repo-dir ./db --template-name myapp_template --enable-monitoring
+git clone https://github.com/evoludigit/dbfast
+cd dbfast
+cargo build --release
 
-# 2. Get a seeded database with full observability
-dbfast seed --output test_db_$(date +%s) --with-metrics
-
-# 3. Deploy to production with safety confirmations
-dbfast deploy --remote production --env production --with-backup --confirm
+# Binary available at target/release/dbfast
 ```
 
-## 🏗️ Enterprise Architecture
+## Configuration
 
-```
-┌─────────────────────────────────────────────────────────┐
-│ DBFast Enterprise Layer                                 │
-│ ┌─────────────┐ ┌─────────────┐ ┌─────────────────────┐ │
-│ │Security     │ │Observability│ │Performance          │ │
-│ │- SQL Guard  │ │- Tracing    │ │- Metrics Collection │ │
-│ │- Rate Limit │ │- Audit Log  │ │- Health Monitoring  │ │
-│ │- Auth/AuthZ │ │- Structured │ │- Circuit Breakers   │ │
-│ └─────────────┘ │  Logging    │ └─────────────────────┘ │
-│                 └─────────────┘                         │
-└─────────────────────────────────────────────────────────┘
-                            ↓
-┌─────────────────────────────────────────────────────────┐
-│ Core Database Operations                                │
-│ - Template Management  - Environment Filtering         │
-│ - Atomic Cloning      - Remote Deployment              │
-│ - Change Detection    - Backup Integration             │
-└─────────────────────────────────────────────────────────┘
-                            ↓
-┌─────────────────────────────────────────────────────────┐
-│ PostgreSQL Database                                     │
-│ - Native Template Cloning  - ZSTD Compression          │
-│ - Connection Pooling       - Transaction Safety        │
-└─────────────────────────────────────────────────────────┘
-```
-
----
-
-## 📋 Environment-Aware Configuration
+Create a `dbfast.toml` configuration file:
 
 ```toml
 [database]
@@ -117,418 +67,147 @@ user = "postgres"
 password_env = "POSTGRES_PASSWORD"
 template_name = "myapp_template"
 
-# Enterprise Security Settings
-[security]
-enable_rate_limiting = true
-max_requests_per_minute = 100
-enable_sql_injection_detection = true
-session_timeout_minutes = 60
-enable_audit_logging = true
-
-# Observability Configuration
-[observability]
-enable_tracing = true
-enable_metrics_export = true
-log_level = "info"
-metrics_export_interval = 60
-
-# Environment Definitions
+# Environment definitions
 [environments.local]
 include_directories = ["0_schema", "1_seed_common", "2_seed_backend"]
-
-[environments.staging]
-include_directories = ["0_schema", "1_seed_common", "3_seed_staging"]
-require_confirmation = true
-backup_before_deploy = true
 
 [environments.production]
 include_directories = ["0_schema", "6_migration"]
 exclude_directories = ["1_seed_common", "2_seed_backend"]
-require_confirmation = true
-backup_before_deploy = true
-allow_destructive = false
 
-# Remote Configurations
-[remotes.staging]
-url = "postgres://staging-server:5432/myapp"
-environment = "staging"
-require_confirmation = true
-backup_before_deploy = true
-
+# Remote configurations
 [remotes.production]
 url = "postgres://prod-server:5432/myapp"
 environment = "production"
-require_confirmation = true
-backup_before_deploy = true
-allow_destructive = false
-password_env = "PROD_DB_PASSWORD"
 ```
 
----
+## Usage
 
-## 🛠️ Enterprise Commands
+### Initialize Template
 
-### Template Management with Monitoring
 ```bash
-# Initialize with enterprise features
-dbfast init --repo-dir ./db --template-name myapp_template --enable-all
-
-# Rebuild with performance tracking
-dbfast rebuild --force --with-metrics
-
-# Status with health monitoring
-dbfast status --detailed --health-check
+dbfast init --repo-dir ./db --template-name myapp_template
 ```
 
-### Database Operations with Security
+### Create Database Clone
+
 ```bash
-# Secure seeding with audit logging
-dbfast seed --output test_db --with-seeds --audit-user $(whoami)
-
-# Schema-only with validation
-dbfast seed --output test_schema --validate --secure
+dbfast seed --output test_db_1
+dbfast seed --output test_db_2 --with-seeds
 ```
 
-### Production Deployment with Safety
+### Check Status
+
 ```bash
-# Add remote with security validation
-dbfast remote add --name production --url $PROD_URL --validate-security
-
-# Deploy with comprehensive safety checks
-dbfast deploy --remote production --env production \
-  --confirm --backup --validate --dry-run-first
-
-# Monitor deployment health
-dbfast deploy --remote production --env production \
-  --confirm --backup --monitor-health
+dbfast status
+dbfast status --verbose
 ```
 
-### Enterprise Monitoring & Operations
+### Environment Management
+
 ```bash
-# Export metrics for external monitoring
-dbfast metrics export --format prometheus --output metrics.txt
-
-# Validate configuration security
-dbfast config validate --check-security --report-issues
-
-# Health check with detailed status
-dbfast health check --all-components --export-report
-
-# Audit log analysis
-dbfast audit query --user admin --timerange "last 24h" --risk-level high
+dbfast environments
+dbfast validate-env production
 ```
 
----
+### Remote Deployment
 
-## 📊 Performance Benchmarks
-
-### Core Operations Performance
-```
-Operation                Time        Throughput    Notes
-─────────────────────────────────────────────────────────
-Error Creation          < 1μs       1M ops/sec    Enterprise error handling
-Metrics Collection      < 2μs       500K ops/sec  Thread-safe concurrent
-Security Validation     < 10μs      100K ops/sec  Multi-layer protection
-Database Clone          ~100ms      10 ops/sec    PostgreSQL native
-Template Rebuild        ~2-30s      Variable      Depends on DB size
-Remote Deployment       ~2-5min     Variable      With compression
-```
-
-### Load Testing Results
-- **Concurrent Users**: 10,000+ supported
-- **Response Time**: <100ms at 95th percentile
-- **Error Rate**: <0.1% under normal load
-- **Memory Usage**: <50MB base + connection pools
-- **CPU Overhead**: <2% for monitoring features
-
----
-
-## 🔒 Security Features
-
-### Input Validation & Protection
-```rust
-// Automatic SQL injection prevention
-let result = security_manager.validate_request(
-    client_id,
-    user_input,
-    SecurityContext::DatabaseQuery
-).await;
-
-// Rate limiting with automatic blocking
-if result.recommended_action == SecurityAction::Block {
-    return Err("Request blocked due to security threat");
-}
-```
-
-### Audit Logging & Compliance
-```rust
-// Comprehensive audit trails
-audit_logger.log_event(AuditEntry {
-    event_type: AuditEventType::DatabaseAccess,
-    actor: "user@company.com",
-    action: "seed_database",
-    result: AuditResult::Success,
-    risk_level: RiskLevel::Medium,
-    // ... additional context
-}).await;
-```
-
-### Authentication & Session Management
-```rust
-// Enterprise authentication with lockout protection
-let session = security_manager.authenticate_user(
-    username,
-    password,
-    ClientInfo { ip_address, user_agent, .. }
-).await?;
-
-// Session validation with automatic timeout
-let user = security_manager.validate_session(&session_id).await?;
-```
-
----
-
-## 📈 Monitoring & Observability
-
-### Real-Time Metrics
-```rust
-// Performance tracking with percentiles
-metrics.record_timing("database_clone", duration, tags).await;
-
-// Health monitoring with alerts
-health_monitor.record_query_performance(duration, success).await;
-
-// Custom business metrics
-metrics.increment_counter("deployments_success", None).await;
-```
-
-### Distributed Tracing
-```rust
-// Correlation ID tracking across operations
-let span = observability.create_span("deploy_operation", attributes).await;
-// ... perform operation with full traceability
-let finished_span = span.finish();
-```
-
-### Structured Logging
-```json
-{
-  "timestamp": "2024-12-13T10:30:45Z",
-  "level": "INFO",
-  "component": "deployment",
-  "correlation_id": "deploy-abc123",
-  "message": "Production deployment started",
-  "deployment": {
-    "environment": "production",
-    "database": "myapp_prod",
-    "backup_created": true
-  }
-}
-```
-
----
-
-## 🏢 Enterprise Deployment
-
-### Docker Deployment
-```dockerfile
-FROM rust:1.75-alpine AS builder
-WORKDIR /app
-COPY . .
-RUN cargo build --release
-
-FROM alpine:latest
-RUN apk add --no-cache postgresql-client
-COPY --from=builder /app/target/release/dbfast /usr/local/bin/
-COPY --from=builder /app/dbfast.toml /etc/dbfast/
-ENTRYPOINT ["dbfast"]
-```
-
-### Kubernetes Deployment
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: dbfast-enterprise
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: dbfast
-  template:
-    spec:
-      containers:
-      - name: dbfast
-        image: dbfast:enterprise
-        resources:
-          requests:
-            memory: "64Mi"
-            cpu: "50m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
-        env:
-        - name: POSTGRES_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: db-secret
-              key: password
-        - name: ENABLE_MONITORING
-          value: "true"
-```
-
----
-
-## 📚 Documentation
-
-- **[Enterprise Report](ENTERPRISE_REPORT.md)** - Comprehensive quality assessment
-- **[Project Phasing](PHASING.md)** - Development phases and roadmap
-- **[Security Guide](docs/SECURITY.md)** - Security implementation details
-- **[Monitoring Guide](docs/MONITORING.md)** - Observability setup
-- **[Deployment Guide](docs/DEPLOYMENT.md)** - Production deployment
-- **[API Documentation](docs/API.md)** - Complete API reference
-
----
-
-## 🧪 Testing
-
-### Run All Tests
 ```bash
-# Comprehensive test suite
-cargo test --all-targets
+# Add remote
+dbfast remote add --name production --url $DATABASE_URL --env production
 
-# Enterprise feature tests
-cargo test --test errors_tests
-cargo test --test security_tests
-cargo test --test enterprise_integration_tests
+# List remotes
+dbfast remote list
 
-# Performance benchmarks
-cargo bench --bench enterprise_benchmarks
+# Test connection
+dbfast remote test production
 
-# Load testing (requires --ignored flag)
-cargo test --test load_tests -- --ignored
+# Deploy to remote
+dbfast deploy --remote production --env production --yes
 ```
 
-### Test Coverage
-- **Unit Tests**: 26 tests in source modules
-- **Integration Tests**: 54 tests covering enterprise workflows
-- **Security Tests**: Comprehensive threat detection validation
-- **Performance Tests**: Load testing and benchmarking
-- **End-to-End Tests**: Complete deployment scenarios
+## Project Structure
 
----
-
-## 🔧 Installation
-
-### From Source (Recommended)
-```bash
-git clone https://github.com/evoludigit/dbfast
-cd dbfast
-cargo build --release --features enterprise
-
-# Binary available at target/release/dbfast
-sudo cp target/release/dbfast /usr/local/bin/
+```
+your-project/
+├── db/                          # SQL repository
+│   ├── 0_schema/               # Schema files
+│   ├── 1_seed_common/          # Common seed data
+│   ├── 2_seed_backend/         # Backend-specific seeds
+│   └── 6_migration/            # Migrations
+├── dbfast.toml                 # Configuration
+└── target/release/dbfast       # Binary
 ```
 
-### Pre-built Binaries
-```bash
-# Download latest release
-curl -L https://github.com/evoludigit/dbfast/releases/latest/download/dbfast-x86_64-unknown-linux-gnu.tar.gz | tar xz
+## Testing
 
-# Install
-sudo mv dbfast /usr/local/bin/
+Run the test suite:
+
+```bash
+cargo test
 ```
 
-### Container Image
+**Test Coverage:**
+
+- 40 unit and integration tests passing
+- Error handling system tests
+- Health monitoring data structure tests
+- Metrics collection framework tests
+- Retry/circuit breaker pattern tests
+- Basic database cloning tests
+- Configuration management tests
+
+## Technical Details
+
+### Dependencies
+
+- **tokio**: Async runtime
+- **tokio-postgres**: PostgreSQL driver
+- **bb8/bb8-postgres**: Connection pooling
+- **clap**: CLI argument parsing
+- **serde/toml**: Configuration serialization
+- **walkdir/globset**: File system operations
+- **xxhash-rust**: File change detection
+
+### Performance
+
+- Database clones use PostgreSQL's native `CREATE DATABASE WITH TEMPLATE` command
+- Connection pooling for database operations
+- File change detection using xxHash for incremental updates
+- Async/await throughout for non-blocking operations
+
+### Code Quality
+
+- ~9,000 lines of Rust code
+- Comprehensive error handling with structured error types
+- CLI interface with proper argument validation
+- Configuration validation and environment filtering
+- Modular architecture with separation of concerns
+
+## Limitations
+
+- Requires PostgreSQL (uses PostgreSQL-specific template functionality)
+- No built-in security features beyond PostgreSQL's native security
+- No web interface - CLI only
+- No real-time monitoring beyond basic health checks
+- Configuration changes require restart
+
+## Contributing
+
 ```bash
-docker pull ghcr.io/evoludigit/dbfast:latest
-docker run --rm -v $(pwd):/workspace ghcr.io/evoludigit/dbfast:latest --help
-```
-
----
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
-
-### Development Setup
-```bash
-# Clone and setup
-git clone https://github.com/evoludigit/dbfast
-cd dbfast
+# Setup development environment
 cargo build
-
-# Run tests
-cargo test --all-targets
-
-# Check code quality
-cargo clippy --all-targets
+cargo test
+cargo clippy
 cargo fmt --check
 ```
 
-### Enterprise Development
-```bash
-# Test enterprise features
-cargo test --features enterprise
+## License
 
-# Run security tests
-cargo test --test security_tests
+MIT License - see [LICENSE](LICENSE) file for details.
 
-# Performance benchmarks
-cargo bench
-```
-
----
-
-## 📞 Support
-
-### Community Support
-- **GitHub Issues**: [Report bugs or request features](https://github.com/evoludigit/dbfast/issues)
-- **GitHub Discussions**: [Community Q&A](https://github.com/evoludigit/dbfast/discussions)
-
-### Enterprise Support
-For enterprise customers requiring:
-- Custom SLA agreements
-- Priority support
-- Professional services
-- Training and consulting
-
-Contact: **lionel.hamayon@evolution-digitale.fr**
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## 👤 Author
+## Author
 
 **Lionel Hamayon**
-*Enterprise Software Architect*
-
-- Email: lionel.hamayon@evolution-digitale.fr
-- GitHub: [@evoludigit](https://github.com/evoludigit)
-- Company: Evolution Digitale
-
----
-
-## ⭐ Acknowledgments
-
-- PostgreSQL team for excellent native template support
-- Rust community for enterprise-grade tooling
-- Contributors and early adopters
-- Security researchers for vulnerability disclosure
-
----
-
-<div align="center">
-
-**Made with ❤️ for enterprise teams who need both speed and reliability**
-
-[![GitHub Stars](https://img.shields.io/github/stars/evoludigit/dbfast?style=social)](https://github.com/evoludigit/dbfast/stargazers)
-[![GitHub Forks](https://img.shields.io/github/forks/evoludigit/dbfast?style=social)](https://github.com/evoludigit/dbfast/network/members)
-[![Twitter Follow](https://img.shields.io/twitter/follow/evoludigit?style=social)](https://twitter.com/evoludigit)
-
-</div>
+Email: <lionel.hamayon@evolution-digitale.fr>
+GitHub: [@evoludigit](https://github.com/evoludigit)
