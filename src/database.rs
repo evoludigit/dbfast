@@ -16,6 +16,7 @@
 //!     user: "postgres".to_string(),
 //!     password_env: Some("DB_PASSWORD".to_string()),
 //!     template_name: "my_template".to_string(),
+//!     allow_multi_statement: true,
 //! };
 //!
 //! let pool = DatabasePool::from_config(&config).await?;
@@ -183,12 +184,23 @@ impl DatabasePool {
 
     /// Execute multi-statement SQL content (for SQL files) in a single transaction
     pub async fn execute_sql_content(&self, sql_content: &str) -> Result<(), DatabaseError> {
+        // Default to advanced parsing for backward compatibility
+        self.execute_sql_content_with_config(sql_content, true)
+            .await
+    }
+
+    /// Execute multi-statement SQL content with configurable parsing mode
+    pub async fn execute_sql_content_with_config(
+        &self,
+        sql_content: &str,
+        allow_multi_statement: bool,
+    ) -> Result<(), DatabaseError> {
         let mut conn = self.pool.get().await?;
 
         // Begin transaction
         let transaction = conn.transaction().await.map_err(DatabaseError::Query)?;
 
-        let statements = Self::parse_sql_statements(sql_content);
+        let statements = Self::parse_sql_statements_with_config(sql_content, allow_multi_statement);
 
         // Execute all statements within the transaction
         for statement in statements {
@@ -206,9 +218,16 @@ impl DatabasePool {
         Ok(())
     }
 
-    /// Parse SQL content into individual statements, handling comments, dollar-quoted strings, and edge cases
+    /// Parse SQL content into individual statements with advanced `PostgreSQL` function support
+    ///
+    /// This parser correctly handles:
+    /// - `PostgreSQL` functions with dollar-quoted bodies (including inline functions)
+    /// - Multiple statements on the same line after dollar quotes end
+    /// - Nested dollar quotes with different tags
+    /// - Comments outside dollar quotes (ignored) and inside dollar quotes (preserved)
     #[must_use]
-    pub fn parse_sql_statements(sql_content: &str) -> Vec<String> {
+    #[allow(clippy::cognitive_complexity, clippy::too_many_lines)]
+    pub fn parse_sql_statements_advanced(sql_content: &str) -> Vec<String> {
         let mut statements = Vec::new();
         let mut current_statement = String::new();
         let mut in_multiline_comment = false;
@@ -243,37 +262,114 @@ impl DatabasePool {
                 }
             }
 
-            // Add line to current statement (preserve original spacing for dollar-quoted blocks)
-            if !current_statement.is_empty() || !trimmed.is_empty() {
-                if !current_statement.is_empty() {
-                    current_statement.push('\n');
-                }
-                current_statement.push_str(line);
-            }
-
-            // Handle dollar-quoted strings
+            // Process the line, potentially handling inline dollar quotes and multiple statements
             if in_dollar_quote {
-                // Look for end of dollar-quoted string (exact match)
-                if line.contains(&dollar_tag) {
+                // We're inside a dollar quote, look for the end
+                if let Some(end_pos) = line.find(&dollar_tag) {
+                    let end_tag_pos = end_pos + dollar_tag.len();
+                    // Add everything up to and including the closing dollar tag
+                    current_statement.push('\n');
+                    current_statement.push_str(&line[..end_tag_pos]);
                     in_dollar_quote = false;
                     dollar_tag.clear();
+
+                    // Check if there's more content after the dollar quote on the same line
+                    let remaining_line = &line[end_tag_pos..];
+                    if let Some(semicolon_pos) = remaining_line.find(';') {
+                        // Add content up to semicolon and complete the statement
+                        current_statement.push_str(&remaining_line[..=semicolon_pos]);
+                        let stmt = current_statement.trim().trim_end_matches(';');
+                        if !stmt.is_empty() {
+                            statements.push(stmt.to_string());
+                        }
+                        current_statement.clear();
+
+                        // Process any content after the semicolon as start of new statement
+                        let after_semicolon = remaining_line[semicolon_pos + 1..].trim();
+                        if !after_semicolon.is_empty() {
+                            current_statement.push_str(after_semicolon);
+                        }
+                    } else {
+                        // Add remaining content after dollar quote (no semicolon found)
+                        current_statement.push_str(remaining_line);
+                    }
+                } else {
+                    // Still inside dollar quote, add the whole line
+                    if !current_statement.is_empty() {
+                        current_statement.push('\n');
+                    }
+                    current_statement.push_str(line);
                 }
             } else {
-                // Look for start of dollar-quoted string
+                // Not in dollar quote, check for start of dollar quote
                 if let Some(start_pos) = find_dollar_quote_start(line) {
-                    in_dollar_quote = true;
-                    dollar_tag = extract_dollar_tag(&line[start_pos..]);
-                }
-            }
+                    // Found start of dollar quote
+                    let tag = extract_dollar_tag(&line[start_pos..]);
+                    if tag.is_empty() {
+                        // False positive dollar sign, treat as regular line
+                        if !current_statement.is_empty() {
+                            current_statement.push('\n');
+                        }
+                        current_statement.push_str(line);
+                    } else {
+                        dollar_tag.clone_from(&tag);
 
-            // Check if statement ends with semicolon (only when not in dollar-quoted string)
-            if !in_dollar_quote && trimmed.ends_with(';') {
-                // Remove the semicolon and add to statements
-                current_statement = current_statement.trim_end_matches(';').trim().to_string();
-                if !current_statement.is_empty() {
-                    statements.push(current_statement.clone());
+                        // Add content before dollar quote if any
+                        let before_dollar = &line[..start_pos];
+                        if (!current_statement.is_empty() || !before_dollar.trim().is_empty())
+                            && !current_statement.is_empty()
+                        {
+                            current_statement.push('\n');
+                        }
+                        current_statement.push_str(line);
+
+                        // Check if dollar quote ends on the same line
+                        let dollar_start_in_line = start_pos;
+                        let tag_end_pos = dollar_start_in_line + tag.len();
+                        if let Some(end_pos) = line[tag_end_pos..].find(&tag) {
+                            // Dollar quote starts and ends on same line
+                            let absolute_end_pos = tag_end_pos + end_pos + tag.len();
+
+                            // Check for semicolon after the closing dollar quote
+                            let after_dollar = &line[absolute_end_pos..];
+                            if let Some(semicolon_pos) = after_dollar.find(';') {
+                                // Complete statement found
+                                let stmt = current_statement.trim().trim_end_matches(';');
+                                if !stmt.is_empty() {
+                                    statements.push(stmt.to_string());
+                                }
+                                current_statement.clear();
+
+                                // Start new statement with content after semicolon
+                                let after_semicolon = after_dollar[semicolon_pos + 1..].trim();
+                                if !after_semicolon.is_empty() {
+                                    current_statement.push_str(after_semicolon);
+                                }
+                            }
+                            // If no semicolon, dollar quote is complete but statement continues
+                        } else {
+                            // Dollar quote starts but doesn't end on this line
+                            in_dollar_quote = true;
+                        }
+                    }
+                } else {
+                    // Regular line, no dollar quotes
+                    if !current_statement.is_empty() || !trimmed.is_empty() {
+                        if !current_statement.is_empty() {
+                            current_statement.push('\n');
+                        }
+                        current_statement.push_str(line);
+                    }
+
+                    // Check for statement termination
+                    if trimmed.ends_with(';') {
+                        let stmt = current_statement.trim().trim_end_matches(';');
+                        if !stmt.is_empty() {
+                            statements.push(stmt.to_string());
+                        }
+                        current_statement.clear();
+                    }
                 }
-                current_statement.clear();
             }
         }
 
@@ -284,6 +380,42 @@ impl DatabasePool {
         }
 
         statements
+    }
+
+    /// Simple SQL statement parser (legacy mode) - splits on semicolons only
+    ///
+    /// This is a basic parser that splits statements on semicolons without
+    /// advanced `PostgreSQL` function support. Use only when `allow_multi_statement` is false.
+    #[must_use]
+    pub fn parse_sql_statements_simple(sql_content: &str) -> Vec<String> {
+        sql_content
+            .split(';')
+            .map(str::trim)
+            .filter(|stmt| !stmt.is_empty())
+            .map(String::from)
+            .collect()
+    }
+
+    /// Parse SQL content into individual statements based on configuration
+    ///
+    /// Uses advanced parsing if `allow_advanced` is true, otherwise uses simple parsing
+    #[must_use]
+    pub fn parse_sql_statements(sql_content: &str) -> Vec<String> {
+        // Default to advanced parsing for backward compatibility
+        Self::parse_sql_statements_advanced(sql_content)
+    }
+
+    /// Parse SQL content with configurable parsing mode
+    #[must_use]
+    pub fn parse_sql_statements_with_config(
+        sql_content: &str,
+        allow_multi_statement: bool,
+    ) -> Vec<String> {
+        if allow_multi_statement {
+            Self::parse_sql_statements_advanced(sql_content)
+        } else {
+            Self::parse_sql_statements_simple(sql_content)
+        }
     }
 }
 

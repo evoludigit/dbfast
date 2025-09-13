@@ -68,6 +68,7 @@ fn create_test_project_with_environments() -> TempDir {
             user: "postgres".to_string(),
             password_env: Some("POSTGRES_PASSWORD".to_string()),
             template_name: "blog_template".to_string(),
+            allow_multi_statement: true,
         },
         repository: RepositoryConfig {
             path: temp_dir.path().display().to_string(),
@@ -128,6 +129,7 @@ fn create_unsafe_production_config() -> TempDir {
             user: "postgres".to_string(),
             password_env: Some("POSTGRES_PASSWORD".to_string()),
             template_name: "unsafe_template".to_string(),
+            allow_multi_statement: true,
         },
         repository: RepositoryConfig {
             path: temp_dir.path().display().to_string(),
@@ -431,6 +433,7 @@ fn test_validate_env_command_checks_file_existence() {
             user: "postgres".to_string(),
             password_env: Some("POSTGRES_PASSWORD".to_string()),
             template_name: "test_template".to_string(),
+            allow_multi_statement: true,
         },
         repository: RepositoryConfig {
             path: temp_dir.path().display().to_string(),
