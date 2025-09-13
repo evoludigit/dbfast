@@ -5,7 +5,7 @@ async fn test_database_connection_pool_creation() {
     let config = Config::from_file("tests/fixtures/dbfast.toml").unwrap();
 
     // Test that we can create a pool from config
-    match DatabasePool::new(&config.database).await {
+    match DatabasePool::from_config(&config.database).await {
         Ok(_pool) => {
             // Pool creation succeeded - actual query testing would require TestContainers
             println!("✅ Database pool creation succeeded");
@@ -21,7 +21,7 @@ async fn test_database_connection_pool_creation() {
 async fn test_database_config_validation() {
     // Test that we can create a pool from config (doesn't actually connect yet)
     let config = Config::from_file("tests/fixtures/dbfast.toml").unwrap();
-    let result = DatabasePool::new(&config.database).await;
+    let result = DatabasePool::from_config(&config.database).await;
     // For now, our pool creation succeeds without immediate connection testing
     // Real database connection testing would require TestContainers
     assert!(result.is_ok());

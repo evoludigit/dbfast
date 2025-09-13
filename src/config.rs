@@ -1,3 +1,31 @@
+//! # Configuration Management Module
+//!
+//! Handles loading and parsing of DBFast configuration files in TOML format.
+//! Configuration includes database connection details, repository settings,
+//! environment-specific configurations, and remote database settings.
+//!
+//! ## Example Configuration File (dbfast.toml)
+//!
+//! ```toml
+//! [database]
+//! host = "localhost"
+//! port = 5432
+//! user = "postgres"
+//! password_env = "DB_PASSWORD"
+//! template_name = "my_app_template"
+//!
+//! [repository]
+//! sql_dir = "./sql"
+//! exclude_patterns = ["*.backup.sql", "temp_*"]
+//!
+//! [environments.development]
+//! filter_patterns = ["dev_*", "test_*"]
+//!
+//! [remotes.production]
+//! url = "postgresql://user@prod-host:5432/database"
+//! env = "production"
+//! ```
+
 use crate::remote::RemoteConfig;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -69,7 +97,21 @@ pub struct Environment {
 }
 
 impl Config {
-    /// Create a new configuration with default values
+    /// Create a new configuration with sensible default values
+    ///
+    /// Sets up a default configuration suitable for most `PostgreSQL` database
+    /// projects with common environment patterns (local, production).
+    ///
+    /// # Arguments
+    /// * `repo_path` - Path to the SQL repository directory
+    /// * `template_name` - Name for the database template
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// use dbfast::Config;
+    ///
+    /// let config = Config::new("./sql", "my_app_template");
+    /// ```
     #[must_use]
     pub fn new(repo_path: &str, template_name: &str) -> Self {
         let mut environments = HashMap::new();
@@ -113,9 +155,44 @@ impl Config {
     }
 
     /// Load configuration from a TOML file
+    ///
+    /// Reads and parses a TOML configuration file, returning a Config instance
+    /// with all settings loaded and validated.
+    ///
+    /// # Arguments
+    /// * `path` - Path to the TOML configuration file
+    ///
+    /// # Errors
+    /// Returns `ConfigError` if the file cannot be read or parsed
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// use dbfast::Config;
+    ///
+    /// let config = Config::from_file("dbfast.toml")?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, ConfigError> {
         let contents = fs::read_to_string(path)?;
         let config: Self = toml::from_str(&contents)?;
         Ok(config)
+    }
+
+    /// Load configuration from a TOML file (alias for `from_file`)
+    ///
+    /// This is a convenience method that provides a shorter name for loading configuration.
+    ///
+    /// # Arguments
+    /// * `path` - Path to the TOML configuration file
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// use dbfast::Config;
+    ///
+    /// let config = Config::load("dbfast.toml")?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn load<P: AsRef<Path>>(path: P) -> Result<Self, ConfigError> {
+        Self::from_file(path)
     }
 }

@@ -13,7 +13,7 @@ async fn test_database_cloning_basic() {
 
     // For the GREEN phase, we test the API structure works
     // Database connection errors are expected in test environment without PostgreSQL
-    let pool_result = DatabasePool::new(&config.database).await;
+    let pool_result = DatabasePool::from_config(&config.database).await;
 
     match pool_result {
         Ok(pool) => {
@@ -67,7 +67,7 @@ async fn test_database_clone_independence() {
     let config = Config::from_file("tests/fixtures/dbfast.toml").unwrap();
 
     // GREEN phase - handle database connection gracefully
-    match DatabasePool::new(&config.database).await {
+    match DatabasePool::from_config(&config.database).await {
         Ok(pool) => {
             let clone_manager = dbfast::clone::CloneManager::new(pool.clone());
 
@@ -100,7 +100,7 @@ async fn test_database_clone_cleanup() {
     let config = Config::from_file("tests/fixtures/dbfast.toml").unwrap();
 
     // GREEN phase - handle database connection gracefully
-    match DatabasePool::new(&config.database).await {
+    match DatabasePool::from_config(&config.database).await {
         Ok(pool) => {
             let clone_manager = dbfast::clone::CloneManager::new(pool);
 

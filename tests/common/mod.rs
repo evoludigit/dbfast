@@ -26,7 +26,7 @@ impl TestDatabase {
 
         // Create admin connection to postgres database for database management
         let admin_config = create_admin_db_config();
-        let admin_pool = DatabasePool::new(&admin_config).await?;
+        let admin_pool = DatabasePool::from_config(&admin_config).await?;
 
         // Create the unique test database
         admin_pool.create_database(&unique_name).await?;

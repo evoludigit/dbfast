@@ -13,7 +13,7 @@ use tempfile::TempDir;
 async fn test_template_creation_basic() {
     let config = Config::from_file("tests/fixtures/dbfast.toml").unwrap();
 
-    match DatabasePool::new(&config.database).await {
+    match DatabasePool::from_config(&config.database).await {
         Ok(pool) => {
             let template_manager = TemplateManager::new(pool, config.database.clone());
 
@@ -54,7 +54,7 @@ async fn test_template_creation_basic() {
 async fn test_template_exists_check() {
     let config = Config::from_file("tests/fixtures/dbfast.toml").unwrap();
 
-    match DatabasePool::new(&config.database).await {
+    match DatabasePool::from_config(&config.database).await {
         Ok(pool) => {
             let template_manager = TemplateManager::new(pool, config.database.clone());
 
@@ -82,7 +82,7 @@ async fn test_template_exists_check() {
 async fn test_template_listing() {
     let config = Config::from_file("tests/fixtures/dbfast.toml").unwrap();
 
-    match DatabasePool::new(&config.database).await {
+    match DatabasePool::from_config(&config.database).await {
         Ok(pool) => {
             let template_manager = TemplateManager::new(pool, config.database.clone());
 
@@ -107,7 +107,7 @@ async fn test_template_listing() {
 async fn test_template_cleanup() {
     let config = Config::from_file("tests/fixtures/dbfast.toml").unwrap();
 
-    match DatabasePool::new(&config.database).await {
+    match DatabasePool::from_config(&config.database).await {
         Ok(pool) => {
             let template_manager = TemplateManager::new(pool, config.database.clone());
 
@@ -137,7 +137,7 @@ async fn test_template_cleanup() {
 async fn test_sql_actually_executed_on_template() {
     let config = Config::from_file("tests/fixtures/dbfast.toml").unwrap();
 
-    match DatabasePool::new(&config.database).await {
+    match DatabasePool::from_config(&config.database).await {
         Ok(pool) => {
             let template_manager = TemplateManager::new(pool.clone(), config.database.clone());
 
@@ -209,7 +209,7 @@ async fn test_sql_actually_executed_on_template() {
 async fn test_list_templates_from_real_postgres() {
     let config = Config::from_file("tests/fixtures/dbfast.toml").unwrap();
 
-    match DatabasePool::new(&config.database).await {
+    match DatabasePool::from_config(&config.database).await {
         Ok(pool) => {
             let template_manager = TemplateManager::new(pool.clone(), config.database.clone());
 
@@ -268,7 +268,7 @@ async fn test_list_templates_from_real_postgres() {
 async fn test_template_clone_integration() {
     let config = Config::from_file("tests/fixtures/dbfast.toml").unwrap();
 
-    match DatabasePool::new(&config.database).await {
+    match DatabasePool::from_config(&config.database).await {
         Ok(pool) => {
             let template_manager = TemplateManager::new(pool.clone(), config.database.clone());
             let clone_manager = dbfast::clone::CloneManager::new(pool);

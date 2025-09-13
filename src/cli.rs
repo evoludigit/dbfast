@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[command(name = "dbfast")]
 #[command(version = crate::VERSION)]
-#[command(about = "DBFast - Lightning-Fast PostgreSQL Database Seeding")]
+#[command(about = "DBFast v0.1.0 - Lightning-Fast PostgreSQL Database Seeding")]
 #[command(
     long_about = "Transform database fixtures from a 60-second bottleneck into a 100ms delight"
 )]

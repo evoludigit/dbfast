@@ -44,11 +44,11 @@ pub async fn handle_seed_async(output_name: &str, with_seeds: bool) -> Result<()
 
     // Step 1: Create database connection pool
     println!("🔌 Connecting to PostgreSQL...");
-    let pool = DatabasePool::new(&config.database).await.map_err(|e| {
-        DbFastError::ConfigCreationFailed {
+    let pool = DatabasePool::from_config(&config.database)
+        .await
+        .map_err(|e| DbFastError::ConfigCreationFailed {
             message: format!("Failed to connect to database: {e}"),
-        }
-    })?;
+        })?;
 
     // Step 2: Smart template creation with change detection
     let repo_path = PathBuf::from(&config.repository.path);

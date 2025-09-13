@@ -1,4 +1,29 @@
-/// Database connection and pooling for `DBFast`
+//! # Database Connection and Pooling Module
+//!
+//! Provides high-performance database connection pooling for PostgreSQL using bb8.
+//! This module handles connection management, query execution, and database operations
+//! with automatic reconnection and connection pooling for optimal performance.
+//!
+//! ## Example Usage
+//!
+//! ```rust,no_run
+//! use dbfast::{DatabasePool, config::DatabaseConfig};
+//!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! let config = DatabaseConfig {
+//!     host: "localhost".to_string(),
+//!     port: 5432,
+//!     user: "postgres".to_string(),
+//!     password_env: Some("DB_PASSWORD".to_string()),
+//!     template_name: "my_template".to_string(),
+//! };
+//!
+//! let pool = DatabasePool::from_config(&config).await?;
+//! let rows = pool.query("SELECT version()", &[]).await?;
+//! # Ok(())
+//! # }
+//! ```
+
 use crate::config::DatabaseConfig;
 use bb8::{Pool, RunError};
 use bb8_postgres::PostgresConnectionManager;
@@ -32,8 +57,50 @@ pub struct DatabasePool {
 }
 
 impl DatabasePool {
-    /// Create a new database connection pool for the default database
-    pub async fn new(config: &DatabaseConfig) -> Result<Self, DatabaseError> {
+    /// Create a new database connection pool from a database URL
+    ///
+    /// Creates a connection pool using a `PostgreSQL` URL string.
+    /// This is the most convenient method for simple setups.
+    ///
+    /// # Arguments
+    /// * `database_url` - `PostgreSQL` connection URL (e.g., "postgresql://user:pass@host:port/database")
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// use dbfast::DatabasePool;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let pool = DatabasePool::new("postgresql://user:pass@localhost:5432/mydb").await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn new(database_url: &str) -> Result<Self, DatabaseError> {
+        info!("Creating database connection pool from URL");
+
+        // Create connection manager from URL
+        let manager =
+            PostgresConnectionManager::new_from_stringlike(database_url, NoTls).map_err(|e| {
+                error!("Failed to create connection manager from URL: {}", e);
+                DatabaseError::Config(e.to_string())
+            })?;
+
+        // Create pool
+        debug!("Building connection pool with max_size=10");
+        let pool = Pool::builder()
+            .max_size(10)
+            .build(manager)
+            .await
+            .map_err(|e| {
+                error!("Failed to build connection pool: {}", e);
+                e
+            })?;
+
+        info!("Successfully created connection pool from URL");
+        Ok(Self { pool })
+    }
+
+    /// Create a new database connection pool from configuration for the default database
+    pub async fn from_config(config: &DatabaseConfig) -> Result<Self, DatabaseError> {
         info!("Creating database connection pool for default database");
         debug!(
             "Database config: host={}:{}, user={}",

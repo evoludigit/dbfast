@@ -1,6 +1,28 @@
+//! # File Scanner Module
+//!
+//! Provides file scanning functionality with xxHash-based change detection for SQL files.
+//! This module is core to DBFast's performance optimization - it enables intelligent
+//! rebuilding of database templates only when SQL files have actually changed.
+//!
+//! ## Example Usage
+//!
+//! ```rust,no_run
+//! use dbfast::FileScanner;
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let scanner = FileScanner::new("./sql");
+//! let files = scanner.scan_sql_files()?;
+//!
+//! for file in files {
+//!     println!("Found SQL file: {} (hash: {})",
+//!              file.path.display(), file.hash);
+//! }
+//! # Ok(())
+//! # }
+//! ```
+
 use std::fs;
 use std::io;
-/// File scanning and hash calculation for change detection
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 use walkdir::WalkDir;
@@ -77,5 +99,23 @@ impl FileScanner {
         files.sort_by(|a, b| a.path.cmp(&b.path));
 
         Ok(files)
+    }
+
+    /// Alias for `scan()` method for backward compatibility and clearer naming
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// use dbfast::FileScanner;
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let scanner = FileScanner::new("./sql");
+    /// let sql_files = scanner.scan_sql_files()?;
+    ///
+    /// println!("Found {} SQL files", sql_files.len());
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn scan_sql_files(&self) -> Result<Vec<ScannedFile>, ScannerError> {
+        self.scan()
     }
 }
