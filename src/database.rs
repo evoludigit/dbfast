@@ -206,44 +206,68 @@ impl DatabasePool {
         Ok(())
     }
 
-    /// Parse SQL content into individual statements, handling comments and edge cases
-    fn parse_sql_statements(sql_content: &str) -> Vec<String> {
+    /// Parse SQL content into individual statements, handling comments, dollar-quoted strings, and edge cases
+    #[must_use]
+    pub fn parse_sql_statements(sql_content: &str) -> Vec<String> {
         let mut statements = Vec::new();
         let mut current_statement = String::new();
-        let mut in_comment = false;
+        let mut in_multiline_comment = false;
+        let mut in_dollar_quote = false;
+        let mut dollar_tag = String::new();
 
         for line in sql_content.lines() {
             let trimmed = line.trim();
 
-            // Skip empty lines
-            if trimmed.is_empty() {
+            // Skip empty lines when not in a dollar-quoted string
+            if trimmed.is_empty() && !in_dollar_quote {
                 continue;
             }
 
-            // Skip single-line comments
-            if trimmed.starts_with("--") {
+            // Skip single-line comments when not in a dollar-quoted string
+            if trimmed.starts_with("--") && !in_dollar_quote {
                 continue;
             }
 
-            // Handle multi-line comments (basic implementation)
-            if trimmed.starts_with("/*") {
-                in_comment = true;
-                continue;
-            }
-            if trimmed.ends_with("*/") {
-                in_comment = false;
-                continue;
-            }
-            if in_comment {
-                continue;
+            // Handle multi-line comments (basic implementation) when not in a dollar-quoted string
+            if !in_dollar_quote {
+                if trimmed.starts_with("/*") {
+                    in_multiline_comment = true;
+                    continue;
+                }
+                if trimmed.ends_with("*/") {
+                    in_multiline_comment = false;
+                    continue;
+                }
+                if in_multiline_comment {
+                    continue;
+                }
             }
 
-            // Add line to current statement
-            current_statement.push(' ');
-            current_statement.push_str(line);
+            // Add line to current statement (preserve original spacing for dollar-quoted blocks)
+            if !current_statement.is_empty() || !trimmed.is_empty() {
+                if !current_statement.is_empty() {
+                    current_statement.push('\n');
+                }
+                current_statement.push_str(line);
+            }
 
-            // Check if statement ends with semicolon
-            if trimmed.ends_with(';') {
+            // Handle dollar-quoted strings
+            if in_dollar_quote {
+                // Look for end of dollar-quoted string (exact match)
+                if line.contains(&dollar_tag) {
+                    in_dollar_quote = false;
+                    dollar_tag.clear();
+                }
+            } else {
+                // Look for start of dollar-quoted string
+                if let Some(start_pos) = find_dollar_quote_start(line) {
+                    in_dollar_quote = true;
+                    dollar_tag = extract_dollar_tag(&line[start_pos..]);
+                }
+            }
+
+            // Check if statement ends with semicolon (only when not in dollar-quoted string)
+            if !in_dollar_quote && trimmed.ends_with(';') {
                 // Remove the semicolon and add to statements
                 current_statement = current_statement.trim_end_matches(';').trim().to_string();
                 if !current_statement.is_empty() {
@@ -261,7 +285,30 @@ impl DatabasePool {
 
         statements
     }
+}
 
+/// Find the position of a dollar-quoted string start in a line
+/// Returns the position where the dollar-quoted string begins (position of first $)
+fn find_dollar_quote_start(line: &str) -> Option<usize> {
+    line.find('$').and_then(|start| {
+        // Look for the closing $ after the tag
+        line[start + 1..].find('$').map(|_| start)
+    })
+}
+
+/// Extract the dollar tag from a dollar-quoted string (e.g., "$$" or "$BODY$")
+/// Returns the complete tag including the surrounding $ characters
+fn extract_dollar_tag(text: &str) -> String {
+    if let Some(start) = text.find('$') {
+        if let Some(end) = text[start + 1..].find('$') {
+            // Return the complete tag: $ + tag_content + $
+            return text[start..=start + 1 + end].to_string();
+        }
+    }
+    String::new()
+}
+
+impl DatabasePool {
     /// Create a database with the given name using template0 for a clean database
     pub async fn create_database(&self, database_name: &str) -> Result<(), DatabaseError> {
         let create_db_sql = format!("CREATE DATABASE {database_name} WITH TEMPLATE template0");
