@@ -72,6 +72,7 @@ fn create_admin_db_config() -> DatabaseConfig {
         user: "postgres".to_string(),
         password_env: Some("POSTGRES_PASSWORD".to_string()),
         template_name: "postgres".to_string(), // Connect to postgres database for admin operations
+        allow_multi_statement: true,
     }
 }
 
@@ -82,6 +83,7 @@ fn create_test_db_config_with_name(database_name: &str) -> DatabaseConfig {
         port: 5432,
         user: "postgres".to_string(),
         password_env: Some("POSTGRES_PASSWORD".to_string()),
+        allow_multi_statement: true,
         template_name: database_name.to_string(),
     }
 }

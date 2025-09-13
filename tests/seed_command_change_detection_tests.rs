@@ -34,6 +34,7 @@ fn create_test_config(temp_dir: &std::path::Path, template_name: &str) -> std::i
             user: "postgres".to_string(),
             password_env: Some("POSTGRES_PASSWORD".to_string()),
             template_name: template_name.to_string(),
+            allow_multi_statement: true,
         },
         repository: RepositoryConfig {
             path: temp_dir.display().to_string(),

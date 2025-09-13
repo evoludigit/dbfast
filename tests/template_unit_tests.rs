@@ -9,6 +9,7 @@ fn create_test_db_config() -> DatabaseConfig {
         user: "postgres".to_string(),
         password_env: Some("POSTGRES_PASSWORD".to_string()),
         template_name: "test_template".to_string(),
+        allow_multi_statement: true,
     }
 }
 

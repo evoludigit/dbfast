@@ -73,6 +73,15 @@ pub struct DatabaseConfig {
     pub password_env: Option<String>,
     /// Template database name
     pub template_name: String,
+    /// Enable advanced multi-statement SQL parsing for `PostgreSQL` functions
+    /// Default: true
+    #[serde(default = "default_allow_multi_statement")]
+    pub allow_multi_statement: bool,
+}
+
+/// Default value for `allow_multi_statement`
+const fn default_allow_multi_statement() -> bool {
+    true
 }
 
 /// Repository configuration
@@ -144,6 +153,7 @@ impl Config {
                 user: "postgres".to_string(),
                 password_env: Some("POSTGRES_PASSWORD".to_string()),
                 template_name: template_name.to_string(),
+                allow_multi_statement: true,
             },
             repository: RepositoryConfig {
                 path: repo_path.to_string(),

@@ -122,11 +122,15 @@ impl TemplateManager {
 
         // Execute all SQL files in a single transaction
         println!(
-            "🔄 Executing {} SQL files in a single transaction",
-            sql_files.len()
+            "🔄 Executing {} SQL files in a single transaction (multi-statement parsing: {})",
+            sql_files.len(),
+            self.db_config.allow_multi_statement
         );
         template_pool
-            .execute_sql_content(&concatenated_sql)
+            .execute_sql_content_with_config(
+                &concatenated_sql,
+                self.db_config.allow_multi_statement,
+            )
             .await
             .map_err(|e| {
                 DatabaseError::Config(format!("Failed to execute concatenated SQL files: {e}"))
