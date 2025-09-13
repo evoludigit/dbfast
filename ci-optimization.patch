@@ -1,0 +1,46 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index daba2f4..4ff7c03 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -46,9 +46,9 @@ jobs:
+         env:
+           RUSTDOCFLAGS: "-D warnings"
+
+-  # Test suite with coverage
++  # Test suite
+   test:
+-    name: Test & Coverage
++    name: Test
+     runs-on: ubuntu-latest
+
+     services:
+@@ -88,10 +88,10 @@ jobs:
+           sudo apt-get update
+           sudo apt-get install -y postgresql-client
+
+-      - name: Install cargo-nextest and cargo-tarpaulin
++      - name: Install cargo-nextest
+         uses: taiki-e/install-action@v2
+         with:
+-          tool: cargo-nextest,cargo-tarpaulin
++          tool: cargo-nextest
+
+       - name: Wait for PostgreSQL
+         run: |
+@@ -106,16 +106,6 @@ jobs:
+       - name: Run doctests
+         run: cargo test --doc --all-features
+
+-      - name: Generate coverage report
+-        run: cargo tarpaulin --verbose --all-features --workspace --timeout 300 --out xml
+-        continue-on-error: true
+-
+-      - name: Upload coverage to Codecov
+-        uses: codecov/codecov-action@v5
+-        with:
+-          token: ${{ secrets.CODECOV_TOKEN }}
+-          fail_ci_if_error: false
+-
+   # Security audit (optional)
+   security:
+     name: Security Audit
