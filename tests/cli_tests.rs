@@ -26,7 +26,7 @@ fn test_cli_version_command() {
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("dbfast"));
-    assert!(stdout.contains("0.1.0"));
+    assert!(stdout.contains("0.2.0"));
 }
 
 #[test]
